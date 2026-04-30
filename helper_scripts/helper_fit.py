@@ -114,15 +114,16 @@ def fit_qiqcfc_vs_power(
         manual_init_list = [None] * len(filenames)
 
     Npts = len(filenames)
-    Q = np.zeros(Npts)
-    Qc = np.zeros(Npts)
-    Qi = np.zeros(Npts)
-    fc = np.zeros(Npts)
     navg = np.zeros(Npts)
-
-    Qc_err = np.zeros(Npts)
-    Qi_err = np.zeros(Npts)
+    fc = np.zeros(Npts)
     fc_err = np.zeros(Npts)
+    Qi = np.zeros(Npts)
+    Qi_err = np.zeros(Npts)
+    Qc = np.zeros(Npts)
+    Qc_err = np.zeros(Npts)
+    Q = np.zeros(Npts)
+    Q_err =np.zeros(Npts)
+
     errs = np.zeros(Npts)
 
     for idx, filename in enumerate(filenames):
@@ -158,7 +159,7 @@ def fit_qiqcfc_vs_power(
         print(f"Q: {Q[idx]:.0f} +/- {conf_int[0]:.0f}")
         print(f"Qi: {Qi[idx]:.0f} +/- {Qi_err[idx]:.0f}")
         print(f"Qc: {Qc[idx]:.0f} +/- {Qc_err[idx]:.0f}")
-        print(f"fc: {fc[idx]:.6f} +/- {fc_err[idx]:.6f} GHz")
+        print(f"fc: {fc[idx]:.9f} +/- {fc_err[idx]:.9f} GHz")
         print("-------------\n")
 
         if show_plots is False:
@@ -177,11 +178,8 @@ def fit_qiqcfc_vs_power(
         data_dir = Path(data_dir)
         folder_dir = data_dir.name
         filename_csv = f"qiqcfc_vs_power_{dstr}.csv"
-        # report_folder = Path("reports") / folder_dir
-        # hm.check_and_make_dir(str(report_folder))
 
         df.to_csv(data_dir / filename_csv, index=False)
-        # df.to_csv(report_folder / filename_csv, index=False)
     else:
         filename_csv = f"qiqcfc_vs_power_{dstr}.csv"
         df.to_csv(filename_csv, index=False)
@@ -390,7 +388,6 @@ def power_sweep_fit_drv(
         loss_scale=None,
 
         preprocess_method='circle',
-        # preprocess_method='linear',
         ds={'QHP': 7.2e4, 'nc': 1e1, 'Fdtls': 1e-6},
         plot_twinx=True,
         QHP_fix=False,
@@ -438,14 +435,15 @@ def power_sweep_fit_drv(
     )
 
     # Extract fit results
-    Qi = np.asarray(df['Qi'])
-    Qc = np.asarray(df['Qc'])
-    Q = np.asarray(df['Q'])
     navg = np.asarray(df['navg'])
     fc = np.asarray(df['fc [GHz]'])
-    Qi_err = np.asarray(df['Qi error'])
-    Qc_err = np.asarray(df['Qc error'])
     fc_err = np.asarray(df['fc error'])
+    Qi = np.asarray(df['Qi'])
+    Qi_err = np.asarray(df['Qi error'])
+    Qc = np.asarray(df['Qc'])
+    Qc_err = np.asarray(df['Qc error'])
+    Q = np.asarray(df['Q'])
+    Q_err = np.sqrt((Q/Qi)**4*Qi_err**2+(Q/Qc)**4*Qc_err**2)
 
     delta = 1.0 / Qi
     delta_err = Qi_err / Qi**2
@@ -466,29 +464,18 @@ def power_sweep_fit_drv(
     delta_fit_str = None
 
     if plot_fit:
-        if doff > 0:
-            fit_out = fit_delta_tls(
-                Qi[0:-doff], T, fc[0], Qc[0], powers_total[0:-doff],
-                display_scales=ds,
-                QHP_fix=QHP_fix,
-                Qierr=Qi_err,
-                fit_init=tls_fit_init,
-                fit_bounds=tls_fit_bounds
-            )
-        else:
-            fit_out = fit_delta_tls(
+        fit_out = fit_delta_tls(
                 Qi, T, fc[0], Qc[0], powers_total,
                 display_scales=ds,
                 QHP_fix=QHP_fix,
                 Qierr=Qi_err,
                 fit_init=tls_fit_init,
-                fit_bounds=tls_fit_bounds
-            )
+                fit_bounds=tls_fit_bounds)
 
         Fdtls, nc, QHP, Fdtls_err, nc_err, QHP_err, delta_fit, delta_fit_str = fit_out
 
         if loss_scale:
-            delta_fit /= loss_scale
+            delta_fit = delta_fit / loss_scale
 
         print()
         print(f'F * d0_tls: {Fdtls:.2g} +/- {Fdtls_err:.2g}')
