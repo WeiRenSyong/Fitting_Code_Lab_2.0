@@ -33,11 +33,14 @@ print("helper_fit loaded from:", THIS_FILE)
 print("helper_misc loaded from:", hm.__file__)
 print("fit_resonator.resonator loaded from:", res.__file__)
 
-def fit_single_res(filename, filter_points=[0, 0], preprocess_method='circle',
-                   use_gauss_filt=False, use_matched_filt=False,
-                   use_elliptic_filt=False, use_mov_avg_filt=False,
-                   fname_ref=None, data_dir=None, save_dcm_plot=False,
-                   save_fit_dirs=r"fits/", manual_init=None, plot_extra=False):
+def fit_single_res(
+        filename, 
+        preprocess_method='circle',
+        data_dir=None, 
+        save_dcm_plot=False,
+        save_fit_dirs=r"fits/", 
+        manual_init=None, 
+        plot_extra=False):
     """
     Fit a single resonator from file.
     """
@@ -53,19 +56,13 @@ def fit_single_res(filename, filter_points=[0, 0], preprocess_method='circle',
     if not file_path.exists():
         raise FileNotFoundError(f"Resonator file not found: {file_path}")
 
-    # Optionally trim data
-    if sum(filter_points) > 0:
-        print(f"Trimming data to {filter_points} ...")
-        trimmed_fname, _ = trim_s21_wings(str(file_path), filter_points)
-        file_path = Path(trimmed_fname)
-
     print("-------------")
     print(f"fit_single_res: {file_path}")
 
     # Fit settings
     fit_type = 'DCM'
     MC_iteration = 10
-    MC_rounds = 1e3
+    MC_rounds = 1000
     MC_fix = []
     normalize = 5
 
@@ -95,13 +92,17 @@ def fit_single_res(filename, filter_points=[0, 0], preprocess_method='circle',
     params, conf_intervals, err, init1, fig = fsd.fit(myres)
     return params, err, conf_intervals, fig
 
-def fit_qiqcfc_vs_power(filenames, powers, filter_points=None,
-                        preprocess_method='circle', phi0=0.,
-                        use_gauss_filt=False, use_matched_filt=False,
-                        use_elliptic_filt=False, filt_idxs=None,
-                        use_mov_avg_filt=False, fname_ref=None,
-                        data_dir='', show_plots=False, save_dcm_plot=False,
-                        save_fit_dirs=r"fits/", manual_init_list=None, plot_extra=False):
+def fit_qiqcfc_vs_power(
+        filenames, 
+        powers,
+        preprocess_method='circle', 
+        phi0=0., 
+        data_dir='', 
+        show_plots=False, 
+        save_dcm_plot=False,
+        save_fit_dirs=r"fits/", 
+        manual_init_list=None, 
+        plot_extra=False):
     """
     Fits multiple resonances at different powers for a given resonator.
     """
@@ -111,9 +112,6 @@ def fit_qiqcfc_vs_power(filenames, powers, filter_points=None,
 
     if manual_init_list is None:
         manual_init_list = [None] * len(filenames)
-
-    if filt_idxs is None:
-        filt_idxs = []
 
     Npts = len(filenames)
     Q = np.zeros(Npts)
@@ -129,25 +127,14 @@ def fit_qiqcfc_vs_power(filenames, powers, filter_points=None,
 
     for idx, filename in enumerate(filenames):
         manual_init = manual_init_list[idx]
-        filter_pts = filter_points[idx] if filter_points is not None else [0, 0]
-
-        use_matched_filt_chk = use_matched_filt and (idx in filt_idxs)
-        use_elliptic_filt_chk = use_elliptic_filt and (idx in filt_idxs)
-        use_mov_avg_filt_chk = use_mov_avg_filt and (idx in filt_idxs)
-
+        
         params, err, conf_int, fig = fit_single_res(
             filename,
-            filter_points=filter_pts,
             preprocess_method=preprocess_method,
-            use_gauss_filt=use_gauss_filt,
-            use_matched_filt=use_matched_filt_chk,
-            use_elliptic_filt=use_elliptic_filt_chk,
-            use_mov_avg_filt=use_mov_avg_filt_chk,
-            fname_ref=fname_ref,
-            save_dcm_plot=save_dcm_plot,
-            manual_init=manual_init,
-            save_fit_dirs=save_fit_dirs,
             data_dir=data_dir,
+            save_dcm_plot=save_dcm_plot,
+            save_fit_dirs=save_fit_dirs,
+            manual_init=manual_init,
             plot_extra=plot_extra
         )
 
@@ -180,11 +167,8 @@ def fit_qiqcfc_vs_power(filenames, powers, filter_points=None,
             fig.show()
 
     df = pd.DataFrame(
-        np.vstack((powers, navg, fc, Qi, Qc, Q, errs, Qi_err, Qc_err, fc_err)).T,
-        columns=[
-            'Power [dBm]', 'navg', 'fc [GHz]', 'Qi', 'Qc', 'Q',
-            'error', 'Qi error', 'Qc error', 'fc error'
-        ]
+        np.vstack((powers, navg, fc, fc_err, Qi, Qi_err, Qc, Qc_err, Q, errs)).T,
+        columns=['Power [dBm]', 'navg', 'fc [GHz]', 'fc error', 'Qi', 'Qi error', 'Qc', 'Qc error', 'Q', 'error']
     )
 
     dstr = datetime.datetime.today().strftime('%y%m%d_%H_%M_%S')
@@ -452,22 +436,34 @@ def power_to_navg(power_dBm, Qi, Qc, fc, Z0_o_Zr=1.):
 
     return navg
 
-def power_sweep_fit_drv(atten=[0, -70], sample_name=None,
-                        powers_in=None,
-                        all_paths=None,
-                        temperature=0.010,
-                        plot_from_file=False, use_error_bars=True,
-                        temp_correction='', phi0=0, use_gauss_filt=True,
-                        use_matched_filt=False, use_elliptic_filt=False,
-                        use_mov_avg_filt=False, loss_scale=None,
-                        preprocess_method='circle', show_dbm=False,
-                        ds={'QHP': 7.2e4, 'nc': 1e1, 'Fdtls': 1e-6},
-                        data_dir=None,
-                        plot_twinx=True, plot_fit=False, QHP_fix=False,
-                        show_plots=False, save_dcm_plot=False,
-                        save_fit_dirs="fits/", manual_init_list=None,
-                        plot_extra=False,
-                        tls_fit_init=None, tls_fit_bounds=None):
+def power_sweep_fit_drv(
+        sample_name=None,
+        temperature=0.010,      
+        powers_in=None,
+        all_paths=None,
+        atten=[0, -70],
+        save_fit_dirs="fits/",
+        data_dir=None,
+        
+        plot_fit=False,
+        plot_extra=False,
+        save_dcm_plot=False,
+        show_plots=False,
+
+        use_error_bars=True,
+        phi0=0,
+        loss_scale=None,
+
+        preprocess_method='circle',
+        # preprocess_method='linear',
+        ds={'QHP': 7.2e4, 'nc': 1e1, 'Fdtls': 1e-6},
+        plot_twinx=True,
+        QHP_fix=False,
+        manual_init_list=None,
+        show_dbm=False,
+
+        tls_fit_init=None, 
+        tls_fit_bounds=None,):
     """
     Driver for fitting the power sweep data for a given set of data.
     Returns the fitted dataframe and figure handles.
@@ -488,26 +484,16 @@ def power_sweep_fit_drv(atten=[0, -70], sample_name=None,
 
     print(f"powers: {powers}")
 
-    filt_idxs = []
-    fname_ref = filenames[0]
-    filter_points = [[0, 0] for _ in filenames]
-
     dstr = datetime.datetime.today().strftime('%y_%m_%d')
     fsize = 20
     csize = 5
 
     # Perform resonator fits
     df = fit_qiqcfc_vs_power(
-        filenames, powers,
-        filter_points=filter_points,
+        filenames, 
+        powers,
         preprocess_method=preprocess_method,
         phi0=phi0,
-        use_gauss_filt=use_gauss_filt,
-        use_matched_filt=use_matched_filt,
-        use_elliptic_filt=use_elliptic_filt,
-        use_mov_avg_filt=use_mov_avg_filt,
-        filt_idxs=filt_idxs,
-        fname_ref=fname_ref,
         data_dir=data_dir,
         show_plots=show_plots,
         save_dcm_plot=save_dcm_plot,

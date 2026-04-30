@@ -85,7 +85,7 @@ tls_cfg = TLS_FIT_CONFIGS.get(sample_name, TLS_FIT_CONFIGS["default"])
 
 external_attenuation = 0
 internal_attenuation = -70
-temperature_mK = 120
+temperature_mK = 15
 
 # manual_guess_res = [1640, 5830, 7.211780e9, -0.02] # [Q, Qc, f_c, phi]
 
@@ -135,18 +135,14 @@ for resonator_path in chosen_resonators:
             show_plots=False,
 
             use_error_bars=True,
-            temp_correction='',
             phi0=0.,
-            use_gauss_filt=False,
-            use_matched_filt=False,
-            use_elliptic_filt=False,
-            use_mov_avg_filt=False,
             loss_scale=1e-6,
-            # preprocess_method='circle',
-            preprocess_method='linear',
+
+            preprocess_method='circle',
+            # preprocess_method='linear',
             ds={'QHP': 1e4, 'nc': 1, 'Fdtls': 1e-3},
             plot_twinx=False,
-            QHP_fix=True,
+            QHP_fix=True,   # Set QHP as the highest power Q first, which would make more accurate for S-curve fitting
             manual_init_list=init_conds,
             show_dbm=True,
 
