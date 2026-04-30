@@ -80,7 +80,12 @@ def find_circle(
     return matrix1 + xavg, matrix2 + yavg, R
 
 def find_initial_guess(
-        x, y1, y2, Method, output_path, plot_extra):
+        x, 
+        y1, 
+        y2, 
+        Method, 
+        output_path, 
+        plot_extra):
     """
     Determine initial guess for DCM parameters: [Q, Qc, f_c, phi]
     """
@@ -238,12 +243,13 @@ def fit_phase(
         f_data, 
         z_data, 
         guesses=None):
+
     phase = np.unwrap(np.angle(z_data))
 
     if np.max(phase) - np.min(phase) <= 0.8 * 2 * np.pi:
         logging.warning(
-            "Data does not cover a full circle ({:.1f} rad). "
-            "Increase the frequency span?".format(np.max(phase) - np.min(phase))
+            "Data does not cover a full circle."
+            "Increase the frequency span?"
         )
         roll_off = np.max(phase) - np.min(phase)
     else:
@@ -259,7 +265,7 @@ def fit_phase(
     else:
         fr_guess, Ql_guess, delay_guess = guesses
 
-    theta_guess = 0.5 * (np.mean(phase[:5]) + np.mean(phase[-5:]))
+    theta_guess = (np.mean(phase[:3]) + np.mean(phase[-3:])) / 2
 
     def residuals_full(params):
         return phase_dist(phase - phase_centered(f_data, *params))
@@ -280,7 +286,7 @@ def fit_phase(
         fr, Ql = params
         return residuals_full((fr, Ql, theta_guess, delay_guess))
 
-    p_final = spopt.leastsq(residuals_Ql,       [Ql_guess])
+    p_final = spopt.leastsq(residuals_Ql,        [Ql_guess])
     Ql_guess, = p_final[0]
     p_final = spopt.leastsq(residuals_fr_theta,  [fr_guess, theta_guess])
     fr_guess, theta_guess = p_final[0]
@@ -295,6 +301,7 @@ def fit_phase(
 def fit_delay(
         xdata: np.ndarray, 
         ydata: np.ndarray):
+    
     xc, yc, r0 = find_circle(np.real(ydata), np.imag(ydata))
     z_data      = ydata - complex(xc, yc)
     fr, Ql, theta, delay = fit_phase(xdata, z_data)
@@ -313,6 +320,7 @@ def fit_delay(
 
         phase_fit = phase_centered(xdata, fr, Ql, theta, delay_corr)
         residuals = np.unwrap(np.angle(z_data)) - phase_fit
+
         if 2 * np.pi * (xdata[-1] - xdata[0]) * delay_corr <= np.std(residuals):
             break
 
