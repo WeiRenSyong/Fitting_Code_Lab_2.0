@@ -163,7 +163,8 @@ def find_initial_guess(
     return init_guess, x_c, y_c, r
 
 def find_nearest(
-        array, value):
+        array, 
+        value):
     idx = (np.abs(array - value)).argmin()
     return array[idx], idx
 
@@ -234,7 +235,9 @@ def phase_dist(
     return np.pi - np.abs(np.pi - np.abs(angle))
 
 def fit_phase(
-        f_data, z_data, guesses=None):
+        f_data, 
+        z_data, 
+        guesses=None):
     phase = np.unwrap(np.angle(z_data))
 
     if np.max(phase) - np.min(phase) <= 0.8 * 2 * np.pi:
@@ -290,22 +293,22 @@ def fit_phase(
     return p_final[0]
 
 def fit_delay(
-        xdata: np.ndarray, ydata: np.ndarray):
+        xdata: np.ndarray, 
+        ydata: np.ndarray):
     xc, yc, r0 = find_circle(np.real(ydata), np.imag(ydata))
     z_data      = ydata - complex(xc, yc)
     fr, Ql, theta, delay = fit_phase(xdata, z_data)
 
-    # Scale initial delay estimate to avoid overshooting
-    delay      *= 0.05
+    delay       = delay
     delay_corr  = 0
     residuals   = 0
 
     for _ in range(10):
         z_data       = ydata * np.exp(2j * np.pi * delay * xdata)
         xc, yc, r0   = find_circle(np.real(z_data), np.imag(z_data))
-        z_data      -= complex(xc, yc)
+        z_data       = z_data - complex(xc, yc)
 
-        guesses = (fr, Ql, 5e-11)
+        guesses = (fr, Ql, delay)
         fr, Ql, theta, delay_corr = fit_phase(xdata, z_data, guesses)
 
         phase_fit = phase_centered(xdata, fr, Ql, theta, delay_corr)
@@ -315,16 +318,16 @@ def fit_delay(
 
         if delay_corr * delay < 0:
             if abs(delay_corr) > abs(delay):
-                delay *= 0.5
+                delay = delay * 0.5
             else:
-                delay += 0.1 * np.sign(delay_corr) * 5e-11
+                delay = delay * 0.1 * np.sign(delay_corr) * 5e-11
         else:
             if abs(delay_corr) >= 1e-8:
-                delay += min(delay_corr, delay)
+                delay = delay + min(delay_corr, delay)
             elif abs(delay_corr) >= 1e-9:
-                delay *= 1.1
+                delay = delay * 1.1
             else:
-                delay += delay_corr
+                delay = delay + delay_corr
 
     if 2 * np.pi * (xdata[-1] - xdata[0]) * delay_corr > np.std(residuals):
         logging.warning("Delay could not be fit properly!")
