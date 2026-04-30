@@ -23,11 +23,12 @@ np.set_printoptions(precision=4, suppress=True)
 p = inflect.engine()
 
 
-def extract_near_res(x_raw: np.ndarray,
-                     y_raw: np.ndarray,
-                     f_res: float,
-                     kappa: float,
-                     extract_factor: int = 1):
+def extract_near_res(
+        x_raw: np.ndarray,
+        y_raw: np.ndarray,
+        f_res: float,
+        kappa: float,
+        extract_factor: int = 1):
     """Extract a portion of the spectrum around resonance."""
     xstart = f_res - extract_factor / 2 * kappa
     xend   = f_res + extract_factor / 2 * kappa
@@ -41,8 +42,8 @@ def extract_near_res(x_raw: np.ndarray,
 
     return x_temp, y_temp
 
-
-def find_circle(x, y):
+def find_circle(
+        x, y):
     """Least-squares circle fit (Kåsa method)."""
     x = np.asarray(x, dtype=float)
     y = np.asarray(y, dtype=float)
@@ -78,8 +79,8 @@ def find_circle(x, y):
 
     return matrix1 + xavg, matrix2 + yavg, R
 
-
-def find_initial_guess(x, y1, y2, Method, output_path, plot_extra):
+def find_initial_guess(
+        x, y1, y2, Method, output_path, plot_extra):
     """
     Determine initial guess for DCM parameters: [Q, Qc, f_c, phi]
     """
@@ -161,13 +162,13 @@ def find_initial_guess(x, y1, y2, Method, output_path, plot_extra):
 
     return init_guess, x_c, y_c, r
 
-
-def find_nearest(array, value):
+def find_nearest(
+        array, value):
     idx = (np.abs(array - value)).argmin()
     return array[idx], idx
 
-
-def monte_carlo_fit(xdata=None, ydata=None, parameter=None, Method=None):
+def monte_carlo_fit(
+        xdata=None, ydata=None, parameter=None, Method=None):
     """Monte Carlo refinement of DCM fit parameters."""
     assert xdata     is not None, "xdata is not defined"
     assert ydata     is not None, "ydata is not defined"
@@ -224,16 +225,16 @@ def monte_carlo_fit(xdata=None, ydata=None, parameter=None, Method=None):
 
     return parameter, stop_MC, error
 
-
-def phase_centered(f, fr, Ql, theta, delay=0.):
+def phase_centered(
+        f, fr, Ql, theta, delay=0.):
     return theta - 2 * np.pi * delay * (f - fr) + 2. * np.arctan(2. * Ql * (1. - f / fr))
 
-
-def phase_dist(angle):
+def phase_dist(
+        angle):
     return np.pi - np.abs(np.pi - np.abs(angle))
 
-
-def fit_phase(f_data, z_data, guesses=None):
+def fit_phase(
+        f_data, z_data, guesses=None):
     phase = np.unwrap(np.angle(z_data))
 
     if np.max(phase) - np.min(phase) <= 0.8 * 2 * np.pi:
@@ -288,8 +289,8 @@ def fit_phase(f_data, z_data, guesses=None):
 
     return p_final[0]
 
-
-def fit_delay(xdata: np.ndarray, ydata: np.ndarray):
+def fit_delay(
+        xdata: np.ndarray, ydata: np.ndarray):
     xc, yc, r0 = find_circle(np.real(ydata), np.imag(ydata))
     z_data      = ydata - complex(xc, yc)
     fr, Ql, theta, delay = fit_phase(xdata, z_data)
@@ -330,12 +331,12 @@ def fit_delay(xdata: np.ndarray, ydata: np.ndarray):
 
     return delay
 
-
-def periodic_boundary(angle):
+def periodic_boundary(
+        angle):
     return (angle + np.pi) % (2 * np.pi) - np.pi
 
-
-def calibrate(x_data: np.ndarray, z_data: np.ndarray):
+def calibrate(
+        x_data: np.ndarray, z_data: np.ndarray):
     xc, yc, r = find_circle(np.real(z_data), np.imag(z_data))
     zc = complex(xc, yc)
     z_data2 = z_data - zc
@@ -350,55 +351,16 @@ def calibrate(x_data: np.ndarray, z_data: np.ndarray):
     r /= a
     return delay_remaining, a, alpha, theta, phi, fr, Ql
 
-
-def normalize(f_data, z_data, delay, a, alpha):
+def normalize(
+        f_data, z_data, delay, a, alpha):
     return (z_data / a) * np.exp(1j * (-alpha))
 
-
-def preprocess_linear(xdata: np.ndarray, ydata: np.ndarray, normalize: int,
-                      output_path: str, plot_extra):
-    if plot_extra:
-        fp.plot(np.real(ydata), np.imag(ydata), "Normalize_1", output_path)
-
-    if normalize * 2 > len(ydata):
-        print("Not enough points to normalize; lower normalize or take more points near resonance.")
-
-    phase = np.unwrap(np.angle(ydata))
-
-    slope, intercept, *_ = stats.linregress(
-        np.append(xdata[0:normalize], xdata[-normalize:]),
-        np.append(phase[0:normalize], phase[-normalize:])
-    )
-
-    angle  = np.subtract(phase, slope * xdata)
-    y_test = np.multiply(np.abs(ydata), np.exp(1j * angle))
-    if plot_extra:
-        fp.plot(np.real(y_test), np.imag(y_test), "Normalize_2", output_path)
-
-    angle  = np.subtract(angle, intercept)
-    y_test = np.multiply(np.abs(ydata), np.exp(1j * angle))
-    if plot_extra:
-        fp.plot(np.real(y_test), np.imag(y_test), "Normalize_3", output_path)
-
-    y_db = np.log10(np.abs(ydata)) * 20
-    slope2, intercept2, *_ = stats.linregress(
-        np.append(xdata[0:normalize], xdata[-normalize:]),
-        np.append(y_db[0:normalize], y_db[-normalize:])
-    )
-    magnitude          = np.subtract(y_db, slope2 * xdata + intercept2)
-    magnitude          = 10 ** (magnitude / 20)
-    preprocessed_data  = np.multiply(magnitude, np.exp(1j * angle))
-
-    if plot_extra:
-        fp.plot(np.real(preprocessed_data), np.imag(preprocessed_data), "Normalize_4", output_path)
-
-    return preprocessed_data, slope, intercept, slope2, intercept2
-
-
-def remove_f_dep_background(xdata, ydata, plot_result=True):
+def remove_f_dep_background(
+        xdata, 
+        ydata, 
+        plot_result=True):
     """
-    Remove approximately linear frequency-dependent complex background
-    using a few points from both wings.
+    Remove approximately linear frequency-dependent complex background using a few points from both wings.
     """
     num_points = 3
     x_wing = np.concatenate((xdata[:num_points], xdata[-num_points:]))
@@ -417,7 +379,6 @@ def remove_f_dep_background(xdata, ydata, plot_result=True):
     # angle = np.angle(ydata)
     # angle = np.angle(ydata_remove_bg)
     ydata_remove_bg = mag * np.exp(1j * angle)
-
     # ydata_remove_bg = ydata
 
     if plot_result:
@@ -441,8 +402,11 @@ def remove_f_dep_background(xdata, ydata, plot_result=True):
 
     return xdata, ydata_remove_bg
 
-
-def preprocess_circle(xdata: np.ndarray, ydata: np.ndarray, output_path: str, plot_extra):
+def preprocess_circle(
+        xdata: np.ndarray, 
+        ydata: np.ndarray, 
+        output_path: str, 
+        plot_extra):
     """Circle-based preprocessing with frequency-dependent background removal."""
     xdata, ydata = remove_f_dep_background(xdata, ydata, plot_result=plot_extra)
 
@@ -454,8 +418,8 @@ def preprocess_circle(xdata: np.ndarray, ydata: np.ndarray, output_path: str, pl
 
     return z_norm
 
-
-def background_removal(databg, linear_amps: np.ndarray,
+def background_removal(
+        databg, linear_amps: np.ndarray,
                        phases: np.ndarray, output_path: str):
     x_bg           = databg.freqs
     linear_amps_bg = databg.linear_amps
@@ -472,8 +436,8 @@ def background_removal(databg, linear_amps: np.ndarray,
 
     return np.multiply(linear_amps, np.exp(1j * phases))
 
-
-def min_fit(params, xdata, ydata, Method):
+def min_fit(
+        params, xdata, ydata, Method):
     """
     Minimise DCM fit parameters via lmfit least-squares.
 
@@ -575,8 +539,8 @@ def min_fit(params, xdata, ydata, Method):
 
     return fit_params, conf_array
 
-
-def fit(resonator):
+def fit(
+        resonator):
     """
     Fit a DCM resonator.
 
