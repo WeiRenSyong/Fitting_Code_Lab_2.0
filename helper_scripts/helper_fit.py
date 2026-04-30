@@ -147,13 +147,13 @@ def fit_qiqcfc_vs_power(
         Qc[idx] = np.real(Qcj)
         Qi[idx] = Qij
         fc[idx] = params[2] / fscale
-        errs[idx] = err
         # Intentionally use Qc[0] and fc[0] as reference values for photon-number conversion
         navg[idx] = power_to_navg(powers[idx], Qi[idx], Qc[0], fc[0])
 
         Qi_err[idx] = conf_int[1]
         Qc_err[idx] = conf_int[2]
         fc_err[idx] = conf_int[5] / fscale
+        Q_err[idx] = conf_int[0]
 
         print(f"navg: {navg[idx]:.0f} photons")
         print(f"Q: {Q[idx]:.0f} +/- {conf_int[0]:.0f}")
@@ -168,8 +168,8 @@ def fit_qiqcfc_vs_power(
             fig.show()
 
     df = pd.DataFrame(
-        np.vstack((powers, navg, fc, fc_err, Qi, Qi_err, Qc, Qc_err, Q, errs)).T,
-        columns=['Power [dBm]', 'navg', 'fc [GHz]', 'fc error', 'Qi', 'Qi error', 'Qc', 'Qc error', 'Q', 'error']
+        np.vstack((powers, navg, fc, fc_err, Qi, Qi_err, Qc, Qc_err, Q, Q_err)).T,
+        columns=['Power [dBm]', 'navg', 'fc [GHz]', 'fc error', 'Qi', 'Qi error', 'Qc', 'Qc error', 'Q', 'Q error']
     )
 
     dstr = datetime.datetime.today().strftime('%y%m%d_%H_%M_%S')
