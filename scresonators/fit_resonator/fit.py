@@ -419,8 +419,10 @@ def preprocess_circle(
     return z_norm
 
 def background_removal(
-        databg, linear_amps: np.ndarray,
-                       phases: np.ndarray, output_path: str):
+        databg, 
+        linear_amps: np.ndarray,
+        phases: np.ndarray, 
+        output_path: str):
     x_bg           = databg.freqs
     linear_amps_bg = databg.linear_amps
     phases_bg      = databg.phases

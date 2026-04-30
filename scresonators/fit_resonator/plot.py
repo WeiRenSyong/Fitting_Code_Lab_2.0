@@ -14,14 +14,28 @@ import fit_resonator.cavity_functions as ff
 # The fit function reference is passed in as Method.func where needed.
 
 
-def name_plot(filename, strmethod, output_path, format='.pdf'):
+def name_plot(
+        filename, 
+        strmethod, 
+        output_path, 
+        format='.pdf'):
+
     if filename.endswith('.csv'):
         filename = filename[:-4]
     filename = filename.replace('.', 'p')
+    
     return output_path + strmethod + '_' + filename + format
 
-
-def plot(x, y, name, output_path, x_c=None, y_c=None, r=None, p_x=None, p_y=None):
+def plot(
+        x, 
+        y, 
+        name, 
+        output_path, 
+        x_c=None, 
+        y_c=None, 
+        r=None, 
+        p_x=None, 
+        p_y=None):
     """Plot any given set of x, y data with optional circle and resonance marker."""
     fig = plt.figure(figsize=(10, 10))   # BUG FIX: no shared figure name
     gs  = GridSpec(2, 2)
@@ -41,8 +55,13 @@ def plot(x, y, name, output_path, x_c=None, y_c=None, r=None, p_x=None, p_y=None
     fig.savefig(output_path + name + '.pdf', format='pdf')
     plt.close(fig)
 
-
-def plot2(x, y, x2, y2, name, output_path):
+def plot2(
+        x, 
+        y, 
+        x2, 
+        y2, 
+        name, 
+        output_path):
     """Plot two datasets for comparison."""
     fig = plt.figure(figsize=(10, 10))   # BUG FIX: no shared figure name
     gs  = GridSpec(2, 2)
@@ -53,8 +72,9 @@ def plot2(x, y, x2, y2, name, output_path):
     fig.savefig(output_path + name + '.pdf', format='pdf')
     plt.close(fig)
 
-
-def name_folder(dir, strmethod):
+def name_folder(
+        dir, 
+        strmethod):
     """Generate a timestamped output folder path."""
     result = time.localtime(time.time())
     output = strmethod + '_' + str(result.tm_year)
@@ -84,8 +104,9 @@ def name_folder(dir, strmethod):
 
     return output_path
 
-
-def create_metadata(Method, output_path):
+def create_metadata(
+        Method, 
+        output_path):
     """Write fit configuration to a metadata CSV."""
     with open(output_path + "metadata.csv", "w", newline='') as file:
         writer = csv.writer(file)
@@ -99,18 +120,32 @@ def create_metadata(Method, output_path):
         writer.writerow(vals)
     # BUG FIX: removed redundant file.close() — 'with' handles it
 
-
-def PlotFit(x, y, x_initial, y_initial,
-            slope, intercept, slope2, intercept2,
-            params, Method, error, figurename,
-            x_c, y_c, radius, output_path,
-            conf_array, extract_factor=None, title="DCM Fit",
-            manual_params=None,
-            dfac: int = 1,
-            msizes: list = None,
-            xstr: str = r'$(f-f_c)$ [kHz]',
-            fscale: float = 1e3,
-            fsize: float = 20.):
+def PlotFit(
+        x, 
+        y, 
+        x_initial, 
+        y_initial,
+        slope, 
+        intercept, 
+        slope2, 
+        intercept2,
+        params, 
+        Method, 
+        error, 
+        figurename,
+        x_c, 
+        y_c, 
+        radius, 
+        output_path,
+        conf_array, 
+        extract_factor=None, 
+        title="DCM Fit",
+        manual_params=None,
+        dfac: int = 1,
+        msizes: list = None,
+        xstr: str = r'$(f-f_c)$ [kHz]',
+        fscale: float = 1e3,
+        fsize: float = 20.):
     """
     Plot DCM fit results and write fit_params.csv to output_path.
 
