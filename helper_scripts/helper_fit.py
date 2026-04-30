@@ -188,9 +188,9 @@ def fit_qiqcfc_vs_power(
 
     return df
 
-def fit_delta_tls(Qi, T, fc, Qc, p, display_scales={'QHP': 1e6,
-                'nc': 1e1, 'Fdtls': 1e-6}, QHP_fix=False, Qierr=None,
-                fit_init=None, fit_bounds=None):
+def fit_delta_tls(
+        Qi, T, fc, Qc, p, display_scales={'QHP': 1e6, 'nc': 1e1, 'Fdtls': 1e-6}, QHP_fix=False, Qierr=None,
+        fit_init=None, fit_bounds=None):
     """
     Fit the TLS-related loss model:
 
@@ -350,85 +350,20 @@ def fit_delta_tls(Qi, T, fc, Qc, p, display_scales={'QHP': 1e6,
             delta_fit_str
         )
 
-def trim_s21_wings(fname_in: str, Ntrim: list, minpts: int = 100,
-                   use_asymm: bool = False):
+def power_to_navg(
+        power_dBm, Qi, Qc, fc):
     """
-    Trim the front and back of the S21 data file.
-
-    Parameters
-    ----------
-    fname_in : str
-        Input CSV file path.
-    Ntrim : list
-        [N_front, N_back] points to trim from beginning and end.
-    minpts : int
-        Minimum number of points to keep after trimming.
-    use_asymm : bool
-        Reserved for future asymmetric trimming logic.
-
-    Returns
-    -------
-    fname_out : str
-        Output trimmed filename.
-    data_out : np.ndarray
-        Trimmed data array.
-    """
-    file_path = Path(fname_in)
-
-    if not file_path.exists():
-        raise FileNotFoundError(f"Input file not found: {file_path}")
-
-    if len(Ntrim) != 2:
-        raise ValueError(f"Ntrim must have length 2, got {Ntrim}")
-
-    ntrim_front, ntrim_back = Ntrim
-
-    if ntrim_front < 0 or ntrim_back < 0:
-        raise ValueError(f"Ntrim entries must be nonnegative, got {Ntrim}")
-
-    data_in = np.genfromtxt(file_path, delimiter=',')
-
-    if data_in.ndim != 2 or data_in.shape[1] < 3:
-        raise ValueError(
-            f"Expected at least 3 columns in {file_path}, got shape {data_in.shape}"
-        )
-
-    nrows = data_in.shape[0]
-    if (ntrim_front + ntrim_back) > (nrows - minpts):
-        raise ValueError(
-            f"Ntrim ({Ntrim}) too large for file with {nrows} rows and minpts={minpts}"
-        )
-
-    print(f"data_in.shape: {data_in.shape}")
-    print(f"Ntrim: {Ntrim}")
-
-    start_idx = ntrim_front
-    end_idx = nrows - ntrim_back if ntrim_back > 0 else nrows
-    data_out = data_in[start_idx:end_idx, :]
-
-    print(f"data_out.shape: {data_out.shape}")
-
-    fname_out = file_path.with_name(f"{file_path.stem}_trimmed{file_path.suffix}")
-
-    np.savetxt(fname_out, data_out[:, :3], delimiter=',', fmt='%.8g')
-
-    return str(fname_out), data_out
-
-def power_to_navg(power_dBm, Qi, Qc, fc, Z0_o_Zr=1.):
-    """
-    Converts power to photon number following Eq. (1) of arXiv:1801.10204
-    and Eq. (3) of arXiv:1912.09119
+    Converts power to photon number following Eq. (1) of arXiv:1801.10204 and Eq. (3) of arXiv:1912.09119
     """
     # Physical constants, Planck's constant J s
     h = 6.62607015e-34
-    hbar = 1.0545718e-34
+    hbar = h/2/np.pi
 
     # Convert dBm to W
     Papp = 10**((power_dBm - 30) / 10) # * 1e-3
-    # hb_wc2 = np.pi * h * (fc_GHz * 1e9)**2
     fscale = 1. if fc > 1e9 else 1e9
-    fc_GHz = fc * fscale
-    hb_wc2 = hbar * (2 * np.pi * fc_GHz)**2
+    fc_Hz = fc * fscale
+    hb_wc2 = hbar * (2 * np.pi * fc_Hz)**2
 
     # Return the power as average number of photons
     Q = 1. / ((1. / Qi) + (1. / Qc))
@@ -752,207 +687,11 @@ def power_sweep_fit_drv(
         "fig_d": fig_d,
     }
 
-def set_xaxis_rot(ax, angle=45.):
+def set_xaxis_rot(
+        ax, angle=45.):
     """
     Rotate x-axis labels
     """
     for tick in ax.get_xticklabels():
         tick.set_rotation(angle)
 
-def plot_multiple_cooldown_power_sweeps(atten=[0, -60], sub_QHP=False,
-                                        loss_scale=None):
-    """
-    Plots all of the data as function of temperature for different powers on the
-    same set of figures
-    """
-    # Hardcode the powers used in each cooldown
-    powers_cd23 = np.linspace(-15, -95, 17)
-    powers_cd24 = np.linspace(-15, -95, 17)
-
-    # Power sweep data for cooldowns 23 and 24
-    # Cooldown 23, unknown base temperature, PNA-X
-    # Cooldown 24, 16 mK base temperature, PNA
-    df_cd23_filename = 'qiqcfc_boe_segmented.csv'
-    df_cd24_filename = 'qiqcfc_boe_linear.csv'
-
-    # NYU Al on InP
-    cd_str = 'linear_segmented'
-    filenames = [df_cd23_filename, df_cd24_filename]
-    cd_labels = ['Segmented, 5/41/5',
-                 'Linear, 401']
-    powers = [powers_cd23+sum(atten), 
-              powers_cd24+sum(atten)]
-    ds_1 = {'QHP' : 1e5, 'nc' : 1e0, 'Fdtls' : 1e-6}
-    ds_2 = {'QHP' : 1e5, 'nc' : 1e0, 'Fdtls' : 1e-6}
-    ds = [ds_1, ds_2]
-
-    long_idx = np.argmax([len(p) for p in powers])
-    print(f'long_idx: {long_idx}')
-    long_powers = powers[long_idx]
-    print(f'long_powers: {long_powers}')
-
-    ## Plot the resonance frequenices
-    fsize = 20; csize = 5; lsize = 10 
-    fig_fc, ax_fc = plt.subplots(1, 1, tight_layout=True)
-
-    ## Plot the internal and external quality factors separately
-    fig_qc, ax_qc = plt.subplots(1, 1, tight_layout=True)
-    fig_qi, ax_qi = plt.subplots(1, 1, tight_layout=True)
-    fig_d, ax_d = plt.subplots(1, 1, tight_layout=True)
-    fig_qiqc, ax_qiqc = plt.subplots(1, 1, tight_layout=True)
-
-    # Iterate over all powers, and filenames
-    markers = ['o', 'd', '>', 's', '<', 'h', '^', 'p', 'v']
-    ls      = ['--', ':', '-.']
-    lllen   = len(ls)
-    mlen    = len(markers) // 2
-    mrk_qi  = markers[0::2]
-    mrk_qc  = markers[1::2]
-    colors  = plt.rcParams['axes.prop_cycle'].by_key()['color']
-    clen    = len(colors) // 2
-    clr_qi  = colors[0::2]
-    clr_qc  = colors[1::2]
-    for pidx, p in enumerate(powers):
-        # Read the data from each of the power files
-        df = pd.read_csv(filenames[pidx])
-
-        # Extract the powers, quality factors, resonance frequencies, and 95 %
-        # confidence intervals
-        p      = p #[stidx:endidx]
-        Q      = df['Q'].to_numpy() #[stidx:endidx]
-        Qi     = df['Qi'].to_numpy() #[stidx:endidx]
-        Qc     = df['Qc'].to_numpy() #[stidx:endidx]
-        fc     = df['fc [GHz]'].to_numpy() #[stidx:endidx]
-        Qi_err = df['Qi error'].to_numpy() #[stidx:endidx]
-        Qc_err = df['Qc error'].to_numpy() #[stidx:endidx]
-        fc_err = df['fc error'].to_numpy() #[stidx:endidx]
-        navg   = df['navg'].to_numpy() #[stidx:endidx]
-
-        print(f'\n{cd_labels[pidx]}\n--------------\n')
-        print(f'powers: {p}')
-        print(f'len(powers): {len(p)}')
-        print(f'len(fc): {len(fc)}')
-
-        d = 1. / Qi
-        d_err = Qi_err / Qi**2
-
-        # Hardcode the temperature in mK for now
-        T = 10.
-        pp = p
-        dd = d
-        dd_err = d_err
-        Fdtls, nc, QHP, Fdtls_err, nc_err, QHP_err, delta_fit, delta_fit_str \
-                = fit_delta_tls(Qi, T, fc[0], Qc[0], pp,
-                        display_scales=ds[pidx])
-
-        Fdtls_str = r'$F\delta^{0}_{TLS}$: %.2g$\pm$%.2g' % (Fdtls, Fdtls_err)
-        QHP_str   = ',\n' + r'$Q_{HP}$: %.3g$\pm$%.2g' % (QHP, QHP_err)
-        print(f'delta_other: {1./QHP}')
-
-        # Compute the average number of photons for each input power
-        n = power_to_navg(pp, Qi, Qc[0], fc[0], Z0_o_Zr=1.)
-        print(f'n: {n}')
-
-        # Subtract off the high power loss
-        if sub_QHP:
-            dd -= 1. / QHP
-            delta_fit -= 1./QHP
-
-        # Scale the results by some power of 10
-        if loss_scale:
-            d /= loss_scale
-            d_err /= loss_scale
-            loss_str = r'$\times10^{%d}$' % int(np.log10(loss_scale))
-            delta_fit /= loss_scale
-        else:
-            loss_str = ''
-
-        # d_err += QHP_err / QHP**2
-        # ax_d.set_ylim([0, np.max(delta_fit)+np.max(d_err)-1./QHP])
-
-        # Plot with error bars
-        ax_fc.errorbar(p, fc, yerr=fc_err,
-                ls='', ms=10, marker=markers[pidx],
-                label=cd_labels[pidx], capsize=csize)
-        ax_qc.errorbar(p, Qc, yerr=Qc_err,
-                ls='', ms=10, marker=markers[pidx],
-                label=cd_labels[pidx], capsize=csize)
-        ax_qi.errorbar(pp, Qi, yerr=Qi_err,
-                ls='', ms=10, marker=markers[pidx],
-                label=cd_labels[pidx], capsize=csize)
-
-        if sub_QHP:
-            ax_d.plot(n, delta_fit-1./QHP, ls='-',
-                    color=colors[pidx])
-        else:
-            ax_d.plot(n, delta_fit, ls='-',
-                    color=colors[pidx])
-        ax_d.errorbar(n, dd, yerr=dd_err,
-                ls='', ms=10, marker=markers[pidx],
-                label=cd_labels[pidx]+'\n---------------------\n'\
-                        +delta_fit_str\
-                        +'\n---------------------',
-                capsize=csize, color=colors[pidx])
-        ax_d.plot(n, delta_fit, ls='-',
-                color=colors[pidx])
-
-        ax_qiqc.errorbar(pp, Qi, yerr=Qi_err,
-                ls='', ms=10, marker=mrk_qi[pidx%mlen],
-                color=clr_qi[pidx%clen],
-                label=r'$Q_i$ '+cd_labels[pidx], capsize=csize)
-        ax_qiqc.errorbar(p, Qc, yerr=Qc_err,
-                color=clr_qc[pidx%clen],
-                ls='', ms=10, marker=mrk_qc[pidx%mlen],
-                label=r'$Q_c$ '+cd_labels[pidx], capsize=csize)
-
-    # Update the x, y labels accordingly
-    ax_qc.set_xlabel('Power [dBm]', fontsize=fsize)
-    ax_qi.set_xlabel('Power [dBm]', fontsize=fsize)
-    # ax_d.set_xlabel('Power [dBm]', fontsize=fsize)
-    ax_d.set_xlabel(r'$\left<n\right>$', fontsize=fsize)
-    ax_d.set_xscale('log')
-    # ax_d.set_ylim([-0.5, 6])
-
-    ax_qiqc.set_xlabel('Power [dBm]', fontsize=fsize)
-    ax_fc.set_xlabel('Power [dBm]', fontsize=fsize)
-    ax_qc.set_ylabel(r'$Q_c$', fontsize=fsize)
-    ax_qi.set_ylabel(r'$Q_i$', fontsize=fsize)
-
-    if sub_QHP:
-        ax_d.set_ylabel(r'$(Q_i^{-1}-Q_{HP}^{-1})$%s' % loss_str, fontsize=fsize)
-        Qstr = 'subQHP_'
-    else:
-        ax_d.set_ylabel(r'$Q_i^{-1}$%s' % loss_str, fontsize=fsize)
-        Qstr = ''
-    ax_qiqc.set_ylabel(r'$Q_i$, $Q_c$', fontsize=fsize)
-    ax_fc.set_ylabel('Resonance Frequency [GHz]', fontsize=fsize)
-
-    ax_qiqc.set_title('Measured at Base Temperature ~16 mK', fontsize=fsize)
-
-    # Set the legends
-    fc_lbls, fc_hdls = ax_fc.get_legend_handles_labels()
-    qc_lbls, qc_hdls = ax_qc.get_legend_handles_labels()
-    qi_lbls, qi_hdls = ax_qi.get_legend_handles_labels()
-    d_lbls, d_hdls = ax_d.get_legend_handles_labels()
-    qiqc_lbls, qiqc_hdls = ax_qiqc.get_legend_handles_labels()
-    ax_fc.legend(fc_lbls, fc_hdls, loc='lower right', fontsize=fsize)
-    ax_qc.legend(qc_lbls, qc_hdls, loc='lower right', fontsize=fsize)
-    ax_qi.legend(qi_lbls, qi_hdls, loc='lower right', fontsize=fsize)
-    # ax_d.legend(d_lbls, d_hdls, loc='center', fontsize=lsize)
-    ax_d.legend(d_lbls, d_hdls, loc='center right', fontsize=lsize)
-    ax_qiqc.legend(qiqc_lbls, qiqc_hdls, loc=(0.1, 0.6), fontsize=fsize)
-
-    ## Save all figures to file vs. power
-    dstr = datetime.datetime.today().strftime('%y%m%d')
-    fig_fc.savefig(f'fc_vs_power_cooldowns_{cd_str}_{dstr}.pdf',
-            format='pdf')
-    fig_qc.savefig(f'qc_vs_power_cooldowns_{cd_str}_{dstr}.pdf',
-            format='pdf')
-    fig_qi.savefig(f'qi_vs_power_cooldowns_{cd_str}_{dstr}.pdf',
-            format='pdf')
-    fig_d.savefig(f'loss_vs_power_cooldowns_{cd_str}_{Qstr}{dstr}.pdf',
-            format='pdf')
-    fig_qiqc.savefig(f'qiqc_vs_power_cooldowns_{cd_str}_{dstr}.pdf',
-            format='pdf')
-
-    plt.close('all')
