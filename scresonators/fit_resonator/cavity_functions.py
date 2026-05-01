@@ -1,4 +1,4 @@
-"""Analytic DCM fit functions (DCM method only)."""
+"""Analytic DCM fit functions"""
 import numpy as np
 
 
@@ -8,6 +8,10 @@ def cavity_DCM(x, Q, Qc, w1, phi):
 
 
 def one_cavity_peak_abs(x, Q, Qc, w1):
+    """Ideal resonator magnitude — used for initial guess fitting."""
+    return np.abs(Q / Qc / (1 + 1j * (x - w1) / w1 * 2 * Q))
+
+def one_cavity_peak(x, Q, Qc, w1):
     """Ideal resonator magnitude — used for initial guess fitting."""
     return np.abs(Q / Qc / (1 + 1j * (x - w1) / w1 * 2 * Q))
 
@@ -24,7 +28,6 @@ def fit_raw_compare(x, y, params, method):
             f"fit_raw_compare: unsupported method '{method}'. Only 'DCM' is supported."
         )
     return np.abs(y - yfit) / np.abs(y)
-
 
 def min_one_Cavity_dip(parameter, x, data=None):
     """

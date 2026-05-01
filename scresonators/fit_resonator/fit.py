@@ -114,21 +114,18 @@ def find_initial_guess(
     try:
         phi      = np.angle(-z_c) # phi is postive when z_c is at the third quadrant
         ydata    = ydata * np.exp(-1j * phi)
-        freq_idx = np.argmax(np.abs(ydata))
+        freq_idx = np.argmin(np.abs(ydata))
         f_c      = x[freq_idx]
         z_c = z_c * np.exp(-1j * phi)
-    except Exception as e:
-        raise ValueError(f"Error shifting data according to phi: {e}")
 
-    try:
         Q_over_Qc = np.max(np.abs(ydata))
-        y_temp    = np.abs(np.abs(ydata) - np.max(np.abs(ydata)) / 2 ** 0.5)
+        y_temp    = np.abs(np.abs(ydata) - np.max(np.abs(ydata)) / np.sqrt(2))
 
         _, idx1 = find_nearest(y_temp[0:freq_idx], 0)
         _, idx2 = find_nearest(y_temp[freq_idx:], 0)
         idx2    = idx2 + freq_idx - 1
 
-        kappa = abs(x[idx1] - x[idx2])
+        kappa = abs(x[idx1] - x[idx2])   # Estimated linewidth
         Q     = f_c / kappa
         Qc    = Q / Q_over_Qc
 
@@ -143,11 +140,14 @@ def find_initial_guess(
         f_c = popt[2]
         init_guess = [Q, Qc, f_c, phi]
 
+        print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz.')
+        print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
+        print(f'Initial guess shows that Q = {Q:.0f}.')
+        print(f'Initial guess shows that Qc = {Qc:.0f}.')      
+
     except Exception as e:
         print(e)
-        raise RuntimeError(
-            "Failed to find initial guess for DCM. Please manually initialize a guess."
-        )
+        raise RuntimeError("Failed to find initial guess for DCM. Please manually initialize a guess.")
 
     return init_guess, x_c, y_c, r
 
