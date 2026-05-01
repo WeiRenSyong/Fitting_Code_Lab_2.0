@@ -79,6 +79,12 @@ def find_circle(
 
     return matrix1 + xavg, matrix2 + yavg, R
 
+def find_nearest(
+        array, # Input data
+        value): # The nearest value and its corresponding index we want to find
+    idx = (np.abs(array - value)).argmin()
+    return array[idx], idx
+
 def find_initial_guess(
         x, 
         y1, # real part
@@ -152,15 +158,15 @@ def find_initial_guess(
 
     return init_guess, x_c, y_c, r
 
-def find_nearest(
-        array, 
-        value):
-    idx = (np.abs(array - value)).argmin()
-    return array[idx], idx
+
 
 def monte_carlo_fit(
-        xdata=None, ydata=None, parameter=None, Method=None):
+        xdata=None, 
+        ydata=None, 
+        parameter=None, 
+        Method=None):
     """Monte Carlo refinement of DCM fit parameters."""
+    
     assert xdata     is not None, "xdata is not defined"
     assert ydata     is not None, "ydata is not defined"
     assert parameter is not None, "parameter is not defined"
@@ -216,9 +222,18 @@ def monte_carlo_fit(
 
     return parameter, stop_MC, error
 
+
+
 def phase_centered(
-        f, fr, Ql, theta, delay=0.):
+        f, 
+        fr, 
+        Ql, 
+        theta, 
+        delay=0.):
     return theta - 2 * np.pi * delay * (f - fr) + 2. * np.arctan(2. * Ql * (1. - f / fr))
+
+
+
 
 def phase_dist(
         angle):
@@ -231,7 +246,8 @@ def fit_phase(
 
     phase = np.unwrap(np.angle(z_data))
 
-    if np.max(phase) - np.min(phase) <= 0.8 * 2 * np.pi:
+    #NOTE: Need to understand this process
+    if np.max(phase) - np.min(phase) <= 0.5 * 2 * np.pi:
         logging.warning(
             "Data does not cover a full circle."
             "Increase the frequency span?"
@@ -240,15 +256,16 @@ def fit_phase(
     else:
         roll_off = 2 * np.pi
 
-    if guesses is None:
-        phase_smooth      = gaussian_filter1d(phase, 30)
-        phase_derivative  = np.gradient(phase_smooth)
-        fr_guess          = f_data[np.argmax(np.abs(phase_derivative))]
-        Ql_guess          = 2 * fr_guess / (f_data[-1] - f_data[0])
-        slope             = phase[-1] - phase[0] + roll_off
-        delay_guess       = -slope / (2 * np.pi * (f_data[-1] - f_data[0]))
-    else:
-        fr_guess, Ql_guess, delay_guess = guesses
+    fr_guess, Ql_guess, delay_guess = guesses
+    # if guesses is None:
+    #     phase_smooth      = gaussian_filter1d(phase, 30)
+    #     phase_derivative  = np.gradient(phase_smooth)
+    #     fr_guess          = f_data[np.argmax(np.abs(phase_derivative))]
+    #     Ql_guess          = 2 * fr_guess / (f_data[-1] - f_data[0])
+    #     slope             = phase[-1] - phase[0] + roll_off
+    #     delay_guess       = -slope / (2 * np.pi * (f_data[-1] - f_data[0]))
+    # else:
+    #     fr_guess, Ql_guess, delay_guess = guesses
 
     theta_guess = (np.mean(phase[:3]) + np.mean(phase[-3:])) / 2
 
@@ -283,49 +300,7 @@ def fit_phase(
 
     return p_final[0]
 
-def fit_delay(
-        xdata: np.ndarray, 
-        ydata: np.ndarray):
-    
-    xc, yc, r0 = find_circle(np.real(ydata), np.imag(ydata))
-    z_data      = ydata - complex(xc, yc)
-    fr, Ql, theta, delay = fit_phase(xdata, z_data)
 
-    delay       = delay
-    delay_corr  = 0
-    residuals   = 0
-
-    for _ in range(10):
-        z_data       = ydata * np.exp(2j * np.pi * delay * xdata)
-        xc, yc, r0   = find_circle(np.real(z_data), np.imag(z_data))
-        z_data       = z_data - complex(xc, yc)
-
-        guesses = (fr, Ql, delay)
-        fr, Ql, theta, delay_corr = fit_phase(xdata, z_data, guesses)
-
-        phase_fit = phase_centered(xdata, fr, Ql, theta, delay_corr)
-        residuals = np.unwrap(np.angle(z_data)) - phase_fit
-
-        if 2 * np.pi * (xdata[-1] - xdata[0]) * delay_corr <= np.std(residuals):
-            break
-
-        if delay_corr * delay < 0:
-            if abs(delay_corr) > abs(delay):
-                delay = delay * 0.5
-            else:
-                delay = delay * 0.1 * np.sign(delay_corr) * 5e-11
-        else:
-            if abs(delay_corr) >= 1e-8:
-                delay = delay + min(delay_corr, delay)
-            elif abs(delay_corr) >= 1e-9:
-                delay = delay * 1.1
-            else:
-                delay = delay + delay_corr
-
-    if 2 * np.pi * (xdata[-1] - xdata[0]) * delay_corr > np.std(residuals):
-        logging.warning("Delay could not be fit properly!")
-
-    return delay
 
 def periodic_boundary(
         angle):
@@ -346,6 +321,8 @@ def calibrate(
 
     r /= a
     return delay_remaining, a, alpha, theta, phi, fr, Ql
+
+
 
 def normalize(
         f_data, z_data, delay, a, alpha):
@@ -419,6 +396,50 @@ def remove_f_dep_background(
 
     return xdata, ydata_remove_bg
 
+def fit_delay(
+        xdata: np.ndarray, 
+        ydata: np.ndarray):
+    
+    xc, yc, r0 = find_circle(np.real(ydata), np.imag(ydata))
+    z_data      = ydata - complex(xc, yc)
+    fr, Ql, theta, delay = fit_phase(xdata, z_data)
+
+    delay       = delay
+    delay_corr  = 0
+    residuals   = 0
+
+    for _ in range(10):
+        z_data       = ydata * np.exp(2j * np.pi * delay * xdata)
+        xc, yc, r0   = find_circle(np.real(z_data), np.imag(z_data))
+        z_data       = z_data - complex(xc, yc)
+
+        guesses = (fr, Ql, delay)
+        fr, Ql, theta, delay_corr = fit_phase(xdata, z_data, guesses)
+
+        phase_fit = phase_centered(xdata, fr, Ql, theta, delay_corr)
+        residuals = np.unwrap(np.angle(z_data)) - phase_fit
+
+        if 2 * np.pi * (xdata[-1] - xdata[0]) * delay_corr <= np.std(residuals):
+            break
+
+        if delay_corr * delay < 0:
+            if abs(delay_corr) > abs(delay):
+                delay = delay * 0.9
+            else:
+                delay = delay * 0.1 * np.sign(delay_corr) * 5e-11
+        else:
+            if abs(delay_corr) >= 1e-8:
+                delay = delay + min(delay_corr, delay)
+            elif abs(delay_corr) >= 1e-9:
+                delay = delay * 1.1
+            else:
+                delay = delay + delay_corr
+
+    if 2 * np.pi * (xdata[-1] - xdata[0]) * delay_corr > np.std(residuals):
+        logging.warning("Delay could not be fit properly!")
+
+    return delay
+
 def preprocess_circle(
         xdata: np.ndarray, 
         ydata: np.ndarray, 
@@ -434,6 +455,8 @@ def preprocess_circle(
     z_norm = normalize(xdata, z_data, delay_remaining, a, alpha)
 
     return z_norm
+
+
 
 def background_removal(
         databg, 
@@ -456,20 +479,20 @@ def background_removal(
     return np.multiply(linear_amps, np.exp(1j * phases))
 
 def min_fit(
-        params, xdata, ydata, Method):
+        params, 
+        xdata, 
+        ydata, 
+        Method):
     """
-    Minimise DCM fit parameters via lmfit least-squares.
+    Minimize DCM fit parameters via lmfit least-squares.
 
     Parameters
     ----------
     params : lmfit.Parameters
         Initial parameter guess (Q, Qc, w1, phi).
-    xdata : np.ndarray
-        Frequency data.
-    ydata : np.ndarray (complex)
-        S21 data.
-    Method : FitMethod
-        Must be DCM.
+    xdata : Frequency data (np.ndarray).
+    ydata : S21 data (np.ndarray) (complex).
+    Method : Must be DCM.
 
     Returns
     -------
