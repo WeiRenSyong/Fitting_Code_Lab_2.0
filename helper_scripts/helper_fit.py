@@ -87,7 +87,16 @@ def fit_single_res(
     )
 
     fig = None
-    params, conf_intervals, err, init1, fig = fsd.fit(myres)
+    
+    # params, conf_intervals, err, init1, fig = fsd.fit(myres)
+    fit_result = fsd.fit(myres)
+    if fit_result is None:
+        raise RuntimeError(
+            f"fsd.fit returned None for file: {file_path}. "
+            "Fitting failed internally (likely bad initial guess or circle preprocessing failed)."
+        )
+    params, conf_intervals, err, init1, fig = fit_result
+
     return params, err, conf_intervals, fig
 
 def fit_qiqcfc_vs_power(

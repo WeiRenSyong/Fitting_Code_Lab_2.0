@@ -1,3 +1,5 @@
+'''fit'''
+
 import logging
 import os
 import sys
@@ -111,38 +113,83 @@ def find_initial_guess(
 
     try:
         ydata = y - 1
-        z_c   = z_c - 1
+        # z_c   = z_c - 1
 
         phi      = np.angle(-z_c)
         ydata    = ydata * np.exp(-1j * phi)
-        # print(f'Check the range of magnitude of the data is from {np.min(np.abs(ydata)):.3f} to {np.max(np.abs(ydata)):.3f}, which is within [0, 1].')
-        freq_idx = np.argmin(np.abs(ydata)) # ydata should from 0 to 1
+        # # print(f'Check the range of magnitude of the data is from {np.min(np.abs(ydata)):.3f} to {np.max(np.abs(ydata)):.3f}, which is within [0, 1].')
+        # freq_idx = np.argmin(np.abs(ydata)) # ydata should from 0 to 1
+
+        mag = np.abs(y)
+        freq_idx = np.argmin(mag)
+        f_c = x[freq_idx]
+
+        off_mag = np.mean(np.r_[mag[:5], mag[-5:]])
+        mag_norm = mag / off_mag
+
+        dip = np.min(mag_norm)
+        depth = 1.0 - dip
+
+        if depth <= 0:
+            raise RuntimeError("No visible resonance dip after normalization.")
+
+        Q_over_Qc = depth
+
+        half_level = dip + 0.5 * depth
+
+        left = np.where(mag_norm[:freq_idx] > half_level)[0]
+        right = np.where(mag_norm[freq_idx:] > half_level)[0]
+
+        if len(left) == 0 or len(right) == 0:
+            raise RuntimeError("Could not find both sides of resonance linewidth")
+
+        idx1 = left[-1]
+        idx2 = freq_idx + right[0]
+
+        kappa = abs(x[idx2] - x[idx1])
+        Q = f_c / kappa
+        Qc    = Q / Q_over_Qc
+
         f_c      = x[freq_idx]
         # print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz, corresponding to the index of {freq_idx}')
         z_c = z_c * np.exp(-1j * phi)
         
-        Q_over_Qc = np.max(np.abs(ydata)) - np.min(np.abs(ydata))
-        y_temp    = np.sqrt((1 - np.min(np.abs(ydata))**2) / 2)
+        
+
+        # Q_over_Qc = np.max(np.abs(ydata)) - np.min(np.abs(ydata))
+        # y_temp    = np.sqrt((1 - np.min(np.abs(ydata))**2) / 2)
         # print(f'Half maximum is estimated to be {y_temp}.')
 
-        _, idx1 = find_nearest(np.abs(ydata[:freq_idx])-y_temp, 0)
-        _, idx2 = find_nearest(np.abs(ydata[freq_idx:])-y_temp, 0)
-        idx2    = idx2 + freq_idx - 1
-        # print(f'FWHM corresponds to index {idx1} and {idx2}.')
+        # _, idx1 = find_nearest(np.abs(ydata[:freq_idx])-y_temp, 0)
+        # _, idx2 = find_nearest(np.abs(ydata[freq_idx:])-y_temp, 0)
+        # idx2    = idx2 + freq_idx - 1
+        # # print(f'FWHM corresponds to index {idx1} and {idx2}.')
 
-        kappa = abs(x[idx1] - x[idx2])   # Estimated linewidth
-        # print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
-        Q     = f_c / kappa
-        # print(f'Initial guess shows that Q = {Q:.0f}.')
-        Qc    = Q / Q_over_Qc       
+        # kappa = abs(x[idx1] - x[idx2])   # Estimated linewidth
+        # # print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
+        # Q     = f_c / kappa
+        # # print(f'Initial guess shows that Q = {Q:.0f}.')
+
+               
         # print(f'Initial guess shows that Qc = {Qc:.0f}.')    
+
+
+        plt.figure()
+        plt.plot(x/1e9, np.abs(y), '.-')
+        plt.axvline(f_c/1e9, color='r')
+        plt.xlabel("Frequency [GHz]")
+        plt.ylabel("|S21|")
+        plt.title("Data entering initial guess")
+        plt.show()
+
 
         popt, _ = spopt.curve_fit(
             ff.one_cavity_peak,
             x,
-            np.abs(ydata),
+            mag_norm,
             p0=[Q, Qc, f_c],
-            bounds=([0, 0, np.min(x)], [np.inf, np.inf, np.max(x)])) # bounds=( [min_Q, min_Qc, min_fc], [max_Q, max_Qc, max_fc] )
+            bounds=([0, 0, np.min(x)], [np.inf, np.inf, np.max(x)])
+        )    # bounds=( [min_Q, min_Qc, min_fc], [max_Q, max_Qc, max_fc] )
         Q, Qc, f_c = popt[0], popt[1], popt[2]
 
         init_guess = [Q, Qc, f_c, phi]
@@ -153,8 +200,7 @@ def find_initial_guess(
         print(f'Initial guess shows that Qc = {Qc:.0f}.')      
 
     except Exception as e:
-        print(e)
-        raise RuntimeError("Failed to find initial guess for DCM. Please manually initialize a guess.")
+        raise RuntimeError(f"Initial guess failed inside find_initial_guess(): {e}") from e
 
     return init_guess, x_c, y_c, r
 
@@ -246,7 +292,6 @@ def fit_phase(
 
     phase = np.unwrap(np.angle(z_data))
 
-    #NOTE: Need to understand this process
     if np.max(phase) - np.min(phase) <= 0.5 * 2 * np.pi:
         logging.warning(
             "Data does not cover a full circle."
@@ -256,16 +301,15 @@ def fit_phase(
     else:
         roll_off = 2 * np.pi
 
-    fr_guess, Ql_guess, delay_guess = guesses
-    # if guesses is None:
-    #     phase_smooth      = gaussian_filter1d(phase, 30)
-    #     phase_derivative  = np.gradient(phase_smooth)
-    #     fr_guess          = f_data[np.argmax(np.abs(phase_derivative))]
-    #     Ql_guess          = 2 * fr_guess / (f_data[-1] - f_data[0])
-    #     slope             = phase[-1] - phase[0] + roll_off
-    #     delay_guess       = -slope / (2 * np.pi * (f_data[-1] - f_data[0]))
-    # else:
-    #     fr_guess, Ql_guess, delay_guess = guesses
+    if guesses is None:
+        phase_smooth = gaussian_filter1d(phase, 30)
+        phase_derivative = np.gradient(phase_smooth)
+        fr_guess = f_data[np.argmax(np.abs(phase_derivative))]
+        Ql_guess = 2 * fr_guess / (f_data[-1] - f_data[0])
+        slope = phase[-1] - phase[0] + roll_off
+        delay_guess = -slope / (2 * np.pi * (f_data[-1] - f_data[0]))
+    else:
+        fr_guess, Ql_guess, delay_guess = guesses
 
     theta_guess = (np.mean(phase[:3]) + np.mean(phase[-3:])) / 2
 
@@ -328,73 +372,13 @@ def normalize(
         f_data, z_data, delay, a, alpha):
     return (z_data / a) * np.exp(1j * (-alpha))
 
-def remove_f_dep_background(
-        xdata, 
-        ydata):
-    """
-    Remove linear frequency-dependent magnitude background using a few points from both wings.
-    """
-    num_points = 3
-    x_wing = np.concatenate((xdata[:num_points], xdata[-num_points:]))
-    y_wing = np.concatenate((ydata[:num_points], ydata[-num_points:]))
+def remove_f_dep_background(xdata, ydata):
+    n_edge = max(5, len(mag)//20)
+    off_mag = np.mean(np.r_[mag[:n_edge], mag[-n_edge:]])
 
-    # Calculate magnitude of the wings
-    mag_wing = np.abs(y_wing)
-    
-    # Fit a first-order polynomial (y = mx + b) to the magnitude only
-    p_mag = np.polyfit(x_wing, mag_wing, 1)
-    
-    # Evaluate the magnitude background across all frequencies
-    mag_background = np.polyval(p_mag, xdata)
-    
-    # Get the original phase and the average magnitude level to preserve scaling
-    original_phase = np.angle(ydata)
-    offset_mag = np.mean(mag_wing)
+    ydata_norm = ydata / off_mag
 
-    # Remove the slope by dividing current magnitude by background
-    # Then multiply by the average offset to keep the data at a similar scale
-    ydata_normalized_mag = (np.abs(ydata) / mag_background) * offset_mag
-    
-    # Re-combine the corrected magnitude with the original phase
-    ydata_remove_bg = ydata_normalized_mag * np.exp(1j * original_phase)
-
-    plt.figure(figsize=(15, 5))
-    
-    # 1. Log-Magnitude Plot
-    plt.subplot(1, 3, 1)
-    plt.plot(xdata, 20 * np.log10(np.abs(ydata)), label='Original', alpha=0.7)
-    plt.plot(xdata, 20 * np.log10(np.abs(ydata_remove_bg)), label='Mag-Corrected', linewidth=2)
-    plt.xlabel('Frequency')
-    plt.ylabel('Magnitude (dB)')
-    plt.title('Log-Magnitude')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-
-    # 2. Phase Plot
-    plt.subplot(1, 3, 2)
-    plt.plot(xdata, np.angle(ydata), label='Original Phase', color='gray', linestyle='--')
-    plt.plot(xdata, np.angle(ydata_remove_bg), label='Unchanged Phase', alpha=0.6)
-    plt.xlabel('Frequency')
-    plt.ylabel('Phase (rad)')
-    plt.title('Phase (Should be identical)')
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-
-    # 3. Complex Circle (IQ Plot)
-    plt.subplot(1, 3, 3)
-    plt.plot(np.real(ydata), np.imag(ydata), label='Original Circle', color='gray', alpha=0.5)
-    plt.plot(np.real(ydata_remove_bg), np.imag(ydata_remove_bg), label='Corrected Circle', color='red', linewidth=2)
-    plt.xlabel('Real')
-    plt.ylabel('Imag')
-    plt.title('Complex IQ Plane')
-    plt.axis('equal') # Ensures the circle looks like a circle
-    plt.legend()
-    plt.grid(True, alpha=0.3)
-
-    plt.tight_layout()
-    plt.show()
-
-    return xdata, ydata_remove_bg
+    return xdata, ydata_norm
 
 def fit_delay(
         xdata: np.ndarray, 
@@ -769,6 +753,7 @@ def fit(
                 extract_factor, title=title,
                 manual_params=Method.manual_init
             )
+            myres.plot = 'png' if save_dcm_plot else None
         except Exception as e:
             raise RuntimeError(f"Failed to plot DCM fit: {e}")
 

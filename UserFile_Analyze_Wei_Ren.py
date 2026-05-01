@@ -139,6 +139,7 @@ for resonator_path in chosen_resonators:
             loss_scale=1e-6,
 
             preprocess_method='circle',
+            # preprocess_method=None,
             ds={'QHP': 1e6, 'nc': 1, 'Fdtls': 1e-5},
             plot_twinx=False,
             QHP_fix=True,   # Set QHP as the highest power Q first, which would make more accurate for S-curve fitting
