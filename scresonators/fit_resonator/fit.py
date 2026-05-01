@@ -94,8 +94,6 @@ def find_initial_guess(
 
     try:
         y  = y1 + 1j * y2
-        y1 = np.real(y)
-        y2 = np.imag(y)
     except Exception as e:
         raise ValueError(f"Problem initializing data in find_initial_guess(): {e}")
 
@@ -108,31 +106,30 @@ def find_initial_guess(
     try:
         ydata = y - 1
         z_c   = z_c - 1
-    except Exception as e:
-        raise ValueError(f"Error shifting data into canonical position: {e}")
 
-    try:
-        phi      = np.angle(-z_c) # phi is postive when z_c is located in the third quadrant
+        phi      = np.angle(-z_c)
         ydata    = ydata * np.exp(-1j * phi)
-        freq_idx = np.argmin(np.abs(ydata))
+        # print(f'Check the range of magnitude of the data is from {np.min(np.abs(ydata)):.3f} to {np.max(np.abs(ydata)):.3f}, which is within [0, 1].')
+        freq_idx = np.argmin(np.abs(ydata)) # ydata should from 0 to 1
         f_c      = x[freq_idx]
+        # print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz, corresponding to the index of {freq_idx}')
         z_c = z_c * np.exp(-1j * phi)
+        
+        Q_over_Qc = np.max(np.abs(ydata)) - np.min(np.abs(ydata))
+        y_temp    = np.sqrt((1 - np.min(np.abs(ydata))**2) / 2)
+        # print(f'Half maximum is estimated to be {y_temp}.')
 
-        Q_over_Qc = np.max(np.abs(ydata))
-        y_temp    = np.abs(np.abs(ydata) - np.max(np.abs(ydata)) / np.sqrt(2))
-
-        _, idx1 = find_nearest(y_temp[0:freq_idx], 0)
-        _, idx2 = find_nearest(y_temp[freq_idx:], 0)
+        _, idx1 = find_nearest(np.abs(ydata[:freq_idx])-y_temp, 0)
+        _, idx2 = find_nearest(np.abs(ydata[freq_idx:])-y_temp, 0)
         idx2    = idx2 + freq_idx - 1
+        # print(f'FWHM corresponds to index {idx1} and {idx2}.')
 
         kappa = abs(x[idx1] - x[idx2])   # Estimated linewidth
+        # print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
         Q     = f_c / kappa
-        Qc    = Q / Q_over_Qc
-
-        print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz, corresponding to the index of {freq_idx}')
-        print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
-        print(f'Initial guess shows that Q = {Q:.0f}.')
-        print(f'Initial guess shows that Qc = {Qc:.0f}.')    
+        # print(f'Initial guess shows that Q = {Q:.0f}.')
+        Qc    = Q / Q_over_Qc       
+        # print(f'Initial guess shows that Qc = {Qc:.0f}.')    
 
         popt, _ = spopt.curve_fit(
             ff.one_cavity_peak,
@@ -140,15 +137,14 @@ def find_initial_guess(
             np.abs(ydata),
             p0=[Q, Qc, f_c],
             bounds=([0, 0, np.min(x)], [np.inf, np.inf, np.max(x)])) # bounds=( [min_Q, min_Qc, min_fc], [max_Q, max_Qc, max_fc] )
-        Q, Qc = popt[0], popt[1]
-        f_c = popt[2]
+        Q, Qc, f_c = popt[0], popt[1], popt[2]
 
         init_guess = [Q, Qc, f_c, phi]
 
-        # print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz, corresponding to the index of {freq_idx}')
-        # print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
-        # print(f'Initial guess shows that Q = {Q:.0f}.')
-        # print(f'Initial guess shows that Qc = {Qc:.0f}.')      
+        print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz')
+        print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
+        print(f'Initial guess shows that Q = {Q:.0f}.')
+        print(f'Initial guess shows that Qc = {Qc:.0f}.')      
 
     except Exception as e:
         print(e)
@@ -355,57 +351,9 @@ def normalize(
         f_data, z_data, delay, a, alpha):
     return (z_data / a) * np.exp(1j * (-alpha))
 
-# def remove_f_dep_background(
-#         xdata, 
-#         ydata, 
-#         plot_result=True):
-#     """
-#     Remove approximately linear frequency-dependent complex background using a few points from both wings.
-#     """
-#     num_points = 3
-#     x_wing = np.concatenate((xdata[:num_points], xdata[-num_points:]))
-#     y_wing = np.concatenate((ydata[:num_points], ydata[-num_points:]))
-
-#     offset_mag = np.mean(np.abs(y_wing))
-#     offset_angle = np.mean(np.angle(y_wing))
-
-#     p_real      = np.polyfit(x_wing, np.real(y_wing), 1)
-#     p_imag      = np.polyfit(x_wing, np.imag(y_wing), 1)
-#     background  = np.polyval(p_real, xdata) + 1j * np.polyval(p_imag, xdata)
-
-#     ydata_remove_bg = ydata / background
-#     mag   = np.abs(ydata_remove_bg) * offset_mag
-#     angle = np.angle(ydata_remove_bg) + offset_angle
-#     # angle = np.angle(ydata)
-#     # angle = np.angle(ydata_remove_bg)
-#     ydata_remove_bg = mag * np.exp(1j * angle)
-#     # ydata_remove_bg = ydata
-
-#     if plot_result:
-#         plt.figure(figsize=(10, 4))
-#         plt.subplot(1, 2, 1)
-#         plt.plot(xdata, 20 * np.log10(np.abs(ydata)),           label='Original')
-#         plt.plot(xdata, 20 * np.log10(np.abs(ydata_remove_bg)), label='Background removed')
-#         plt.xlabel('Frequency')
-#         plt.ylabel('Magnitude (dB)')
-#         plt.title('Log-Magnitude')
-#         plt.legend()
-#         plt.subplot(1, 2, 2)
-#         plt.plot(xdata, np.angle(ydata),           label='Original')
-#         plt.plot(xdata, np.angle(ydata_remove_bg), label='Corrected')
-#         plt.xlabel('Frequency')
-#         plt.ylabel('Phase (rad)')
-#         plt.title('Phase')
-#         plt.legend()
-#         plt.tight_layout()
-#         plt.show()
-
-#     return xdata, ydata_remove_bg
-
 def remove_f_dep_background(
         xdata, 
-        ydata, 
-        plot_result=True):
+        ydata):
     """
     Remove linear frequency-dependent magnitude background using a few points from both wings.
     """
@@ -433,43 +381,41 @@ def remove_f_dep_background(
     # Re-combine the corrected magnitude with the original phase
     ydata_remove_bg = ydata_normalized_mag * np.exp(1j * original_phase)
 
-    if plot_result:
-        # Increased figure size to accommodate the third plot
-        plt.figure(figsize=(15, 5))
-        
-        # 1. Log-Magnitude Plot
-        plt.subplot(1, 3, 1)
-        plt.plot(xdata, 20 * np.log10(np.abs(ydata)), label='Original', alpha=0.7)
-        plt.plot(xdata, 20 * np.log10(np.abs(ydata_remove_bg)), label='Mag-Corrected', linewidth=2)
-        plt.xlabel('Frequency')
-        plt.ylabel('Magnitude (dB)')
-        plt.title('Log-Magnitude')
-        plt.legend()
-        plt.grid(True, alpha=0.3)
+    plt.figure(figsize=(15, 5))
+    
+    # 1. Log-Magnitude Plot
+    plt.subplot(1, 3, 1)
+    plt.plot(xdata, 20 * np.log10(np.abs(ydata)), label='Original', alpha=0.7)
+    plt.plot(xdata, 20 * np.log10(np.abs(ydata_remove_bg)), label='Mag-Corrected', linewidth=2)
+    plt.xlabel('Frequency')
+    plt.ylabel('Magnitude (dB)')
+    plt.title('Log-Magnitude')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
 
-        # 2. Phase Plot
-        plt.subplot(1, 3, 2)
-        plt.plot(xdata, np.angle(ydata), label='Original Phase', color='gray', linestyle='--')
-        plt.plot(xdata, np.angle(ydata_remove_bg), label='Unchanged Phase', alpha=0.6)
-        plt.xlabel('Frequency')
-        plt.ylabel('Phase (rad)')
-        plt.title('Phase (Should be identical)')
-        plt.legend()
-        plt.grid(True, alpha=0.3)
+    # 2. Phase Plot
+    plt.subplot(1, 3, 2)
+    plt.plot(xdata, np.angle(ydata), label='Original Phase', color='gray', linestyle='--')
+    plt.plot(xdata, np.angle(ydata_remove_bg), label='Unchanged Phase', alpha=0.6)
+    plt.xlabel('Frequency')
+    plt.ylabel('Phase (rad)')
+    plt.title('Phase (Should be identical)')
+    plt.legend()
+    plt.grid(True, alpha=0.3)
 
-        # 3. Complex Circle (IQ Plot)
-        plt.subplot(1, 3, 3)
-        plt.plot(np.real(ydata), np.imag(ydata), label='Original Circle', color='gray', alpha=0.5)
-        plt.plot(np.real(ydata_remove_bg), np.imag(ydata_remove_bg), label='Corrected Circle', color='red', linewidth=2)
-        plt.xlabel('Real')
-        plt.ylabel('Imag')
-        plt.title('Complex IQ Plane')
-        plt.axis('equal') # Ensures the circle looks like a circle
-        plt.legend()
-        plt.grid(True, alpha=0.3)
+    # 3. Complex Circle (IQ Plot)
+    plt.subplot(1, 3, 3)
+    plt.plot(np.real(ydata), np.imag(ydata), label='Original Circle', color='gray', alpha=0.5)
+    plt.plot(np.real(ydata_remove_bg), np.imag(ydata_remove_bg), label='Corrected Circle', color='red', linewidth=2)
+    plt.xlabel('Real')
+    plt.ylabel('Imag')
+    plt.title('Complex IQ Plane')
+    plt.axis('equal') # Ensures the circle looks like a circle
+    plt.legend()
+    plt.grid(True, alpha=0.3)
 
-        plt.tight_layout()
-        plt.show()
+    plt.tight_layout()
+    plt.show()
 
     return xdata, ydata_remove_bg
 
@@ -479,7 +425,7 @@ def preprocess_circle(
         output_path: str, 
         plot_extra):
     """Circle-based preprocessing with frequency-dependent background removal."""
-    xdata, ydata = remove_f_dep_background(xdata, ydata, plot_result=plot_extra)
+    xdata, ydata = remove_f_dep_background(xdata, ydata)
 
     delay  = fit_delay(xdata, ydata)
     z_data = ydata * np.exp(2j * np.pi * delay * xdata)
@@ -667,10 +613,6 @@ def fit(
     slope = intercept = slope2 = intercept2 = 0
     if resonator.databg is not None:
         ydata = background_removal(resonator.databg, linear_amps, phases, output_path)
-    elif preprocess_method == "linear":
-        ydata, slope, intercept, slope2, intercept2 = preprocess_linear(
-            xdata, ydata, normalize_pts, output_path, plot_extra
-        )
     elif preprocess_method == "circle":
         ydata = preprocess_circle(xdata, ydata, output_path, plot_extra)
 
