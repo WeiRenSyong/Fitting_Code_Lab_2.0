@@ -110,21 +110,15 @@ def find_initial_guess(
         z_c = x_c + 1j * y_c
     except Exception as e:
         raise ValueError(f"Problem in find_circle(): {e}")
-
+    
     try:
-        ydata = y - 1
-        # z_c   = z_c - 1
-
-        phi      = np.angle(-z_c)
-        ydata    = ydata * np.exp(-1j * phi)
-        # # print(f'Check the range of magnitude of the data is from {np.min(np.abs(ydata)):.3f} to {np.max(np.abs(ydata)):.3f}, which is within [0, 1].')
-        # freq_idx = np.argmin(np.abs(ydata)) # ydata should from 0 to 1
-
+        phi = np.angle(-z_c)
         mag = np.abs(y)
         freq_idx = np.argmin(mag)
         f_c = x[freq_idx]
 
-        off_mag = np.mean(np.r_[mag[:5], mag[-5:]])
+        mag_wing = [mag[:5], mag[-5:]]
+        off_mag = np.mean(mag_wing)
         mag_norm = mag / off_mag
 
         dip = np.min(mag_norm)
@@ -133,9 +127,9 @@ def find_initial_guess(
         if depth <= 0:
             raise RuntimeError("No visible resonance dip after normalization.")
 
-        Q_over_Qc = depth
+        Q_over_Qc = depth   # Q_over_Qc indicates the how deep of the resonance dip
 
-        half_level = dip + 0.5 * depth
+        half_level = dip + depth / np.sqrt(2)
 
         left = np.where(mag_norm[:freq_idx] > half_level)[0]
         right = np.where(mag_norm[freq_idx:] > half_level)[0]
@@ -146,50 +140,24 @@ def find_initial_guess(
         idx1 = left[-1]
         idx2 = freq_idx + right[0]
 
-        kappa = abs(x[idx2] - x[idx1])
+        kappa = abs(x[idx2] - x[idx1])   # linewidth of the resonance
         Q = f_c / kappa
-        Qc    = Q / Q_over_Qc
-
-        f_c      = x[freq_idx]
-        # print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz, corresponding to the index of {freq_idx}')
-        z_c = z_c * np.exp(-1j * phi)
-        
-        
-
-        # Q_over_Qc = np.max(np.abs(ydata)) - np.min(np.abs(ydata))
-        # y_temp    = np.sqrt((1 - np.min(np.abs(ydata))**2) / 2)
-        # print(f'Half maximum is estimated to be {y_temp}.')
-
-        # _, idx1 = find_nearest(np.abs(ydata[:freq_idx])-y_temp, 0)
-        # _, idx2 = find_nearest(np.abs(ydata[freq_idx:])-y_temp, 0)
-        # idx2    = idx2 + freq_idx - 1
-        # # print(f'FWHM corresponds to index {idx1} and {idx2}.')
-
-        # kappa = abs(x[idx1] - x[idx2])   # Estimated linewidth
-        # # print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
-        # Q     = f_c / kappa
-        # # print(f'Initial guess shows that Q = {Q:.0f}.')
-
-               
-        # print(f'Initial guess shows that Qc = {Qc:.0f}.')    
-
+        Qc    = Q / Q_over_Qc  
 
         plt.figure()
-        plt.plot(x/1e9, np.abs(y), '.-')
+        plt.plot(x/1e9, np.abs(y), '.')
         plt.axvline(f_c/1e9, color='r')
         plt.xlabel("Frequency [GHz]")
         plt.ylabel("|S21|")
         plt.title("Data entering initial guess")
         plt.show()
 
-
         popt, _ = spopt.curve_fit(
             ff.one_cavity_peak,
             x,
-            mag_norm,
+            y,
             p0=[Q, Qc, f_c],
-            bounds=([0, 0, np.min(x)], [np.inf, np.inf, np.max(x)])
-        )    # bounds=( [min_Q, min_Qc, min_fc], [max_Q, max_Qc, max_fc] )
+            bounds=([0, 0, np.min(x)], [np.inf, np.inf, np.max(x)]))
         Q, Qc, f_c = popt[0], popt[1], popt[2]
 
         init_guess = [Q, Qc, f_c, phi]
@@ -372,9 +340,11 @@ def normalize(
         f_data, z_data, delay, a, alpha):
     return (z_data / a) * np.exp(1j * (-alpha))
 
-def remove_f_dep_background(xdata, ydata):
-    n_edge = max(5, len(mag)//20)
-    off_mag = np.mean(np.r_[mag[:n_edge], mag[-n_edge:]])
+def remove_f_dep_background(
+        xdata, 
+        ydata):
+    n_edge = max(5, len(xdata)//20)
+    off_mag = np.mean(np.r_[xdata[:n_edge], xdata[-n_edge:]])
 
     ydata_norm = ydata / off_mag
 
