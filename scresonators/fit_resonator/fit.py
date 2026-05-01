@@ -129,17 +129,17 @@ def find_initial_guess(
         Q     = f_c / kappa
         Qc    = Q / Q_over_Qc
 
-        # print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz, corresponding to the index of {freq_idx}')
-        # print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
-        # print(f'Initial guess shows that Q = {Q:.0f}.')
-        # print(f'Initial guess shows that Qc = {Qc:.0f}.')    
+        print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz, corresponding to the index of {freq_idx}')
+        print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
+        print(f'Initial guess shows that Q = {Q:.0f}.')
+        print(f'Initial guess shows that Qc = {Qc:.0f}.')    
 
         popt, _ = spopt.curve_fit(
             ff.one_cavity_peak,
             x,
             np.abs(ydata),
             p0=[Q, Qc, f_c],
-            bounds=([Q*0.5, Qc*0.5, f_c-kappa], [Q*1.5, Qc*1.5, f_c+kappa])) # bounds=( [min_Q, min_Qc, min_fc], [max_Q, max_Qc, max_fc] )
+            bounds=([0, 0, np.min(x)], [np.inf, np.inf, np.max(x)])) # bounds=( [min_Q, min_Qc, min_fc], [max_Q, max_Qc, max_fc] )
         Q, Qc = popt[0], popt[1]
         f_c = popt[2]
 
@@ -355,48 +355,119 @@ def normalize(
         f_data, z_data, delay, a, alpha):
     return (z_data / a) * np.exp(1j * (-alpha))
 
+# def remove_f_dep_background(
+#         xdata, 
+#         ydata, 
+#         plot_result=True):
+#     """
+#     Remove approximately linear frequency-dependent complex background using a few points from both wings.
+#     """
+#     num_points = 3
+#     x_wing = np.concatenate((xdata[:num_points], xdata[-num_points:]))
+#     y_wing = np.concatenate((ydata[:num_points], ydata[-num_points:]))
+
+#     offset_mag = np.mean(np.abs(y_wing))
+#     offset_angle = np.mean(np.angle(y_wing))
+
+#     p_real      = np.polyfit(x_wing, np.real(y_wing), 1)
+#     p_imag      = np.polyfit(x_wing, np.imag(y_wing), 1)
+#     background  = np.polyval(p_real, xdata) + 1j * np.polyval(p_imag, xdata)
+
+#     ydata_remove_bg = ydata / background
+#     mag   = np.abs(ydata_remove_bg) * offset_mag
+#     angle = np.angle(ydata_remove_bg) + offset_angle
+#     # angle = np.angle(ydata)
+#     # angle = np.angle(ydata_remove_bg)
+#     ydata_remove_bg = mag * np.exp(1j * angle)
+#     # ydata_remove_bg = ydata
+
+#     if plot_result:
+#         plt.figure(figsize=(10, 4))
+#         plt.subplot(1, 2, 1)
+#         plt.plot(xdata, 20 * np.log10(np.abs(ydata)),           label='Original')
+#         plt.plot(xdata, 20 * np.log10(np.abs(ydata_remove_bg)), label='Background removed')
+#         plt.xlabel('Frequency')
+#         plt.ylabel('Magnitude (dB)')
+#         plt.title('Log-Magnitude')
+#         plt.legend()
+#         plt.subplot(1, 2, 2)
+#         plt.plot(xdata, np.angle(ydata),           label='Original')
+#         plt.plot(xdata, np.angle(ydata_remove_bg), label='Corrected')
+#         plt.xlabel('Frequency')
+#         plt.ylabel('Phase (rad)')
+#         plt.title('Phase')
+#         plt.legend()
+#         plt.tight_layout()
+#         plt.show()
+
+#     return xdata, ydata_remove_bg
+
 def remove_f_dep_background(
         xdata, 
         ydata, 
         plot_result=True):
     """
-    Remove approximately linear frequency-dependent complex background using a few points from both wings.
+    Remove linear frequency-dependent magnitude background using a few points from both wings.
     """
     num_points = 3
     x_wing = np.concatenate((xdata[:num_points], xdata[-num_points:]))
     y_wing = np.concatenate((ydata[:num_points], ydata[-num_points:]))
 
-    offset_mag = np.mean(np.abs(y_wing))
-    offset_angle = np.mean(np.angle(y_wing))
+    # Calculate magnitude of the wings
+    mag_wing = np.abs(y_wing)
+    
+    # Fit a first-order polynomial (y = mx + b) to the magnitude only
+    p_mag = np.polyfit(x_wing, mag_wing, 1)
+    
+    # Evaluate the magnitude background across all frequencies
+    mag_background = np.polyval(p_mag, xdata)
+    
+    # Get the original phase and the average magnitude level to preserve scaling
+    original_phase = np.angle(ydata)
+    offset_mag = np.mean(mag_wing)
 
-    p_real      = np.polyfit(x_wing, np.real(y_wing), 1)
-    p_imag      = np.polyfit(x_wing, np.imag(y_wing), 1)
-    background  = np.polyval(p_real, xdata) + 1j * np.polyval(p_imag, xdata)
-
-    ydata_remove_bg = ydata / background
-    mag   = np.abs(ydata_remove_bg) * offset_mag
-    angle = np.angle(ydata_remove_bg) + offset_angle
-    # angle = np.angle(ydata)
-    # angle = np.angle(ydata_remove_bg)
-    ydata_remove_bg = mag * np.exp(1j * angle)
-    # ydata_remove_bg = ydata
+    # Remove the slope by dividing current magnitude by background
+    # Then multiply by the average offset to keep the data at a similar scale
+    ydata_normalized_mag = (np.abs(ydata) / mag_background) * offset_mag
+    
+    # Re-combine the corrected magnitude with the original phase
+    ydata_remove_bg = ydata_normalized_mag * np.exp(1j * original_phase)
 
     if plot_result:
-        plt.figure(figsize=(10, 4))
-        plt.subplot(1, 2, 1)
-        plt.plot(xdata, 20 * np.log10(np.abs(ydata)),           label='Original')
-        plt.plot(xdata, 20 * np.log10(np.abs(ydata_remove_bg)), label='Background removed')
+        # Increased figure size to accommodate the third plot
+        plt.figure(figsize=(15, 5))
+        
+        # 1. Log-Magnitude Plot
+        plt.subplot(1, 3, 1)
+        plt.plot(xdata, 20 * np.log10(np.abs(ydata)), label='Original', alpha=0.7)
+        plt.plot(xdata, 20 * np.log10(np.abs(ydata_remove_bg)), label='Mag-Corrected', linewidth=2)
         plt.xlabel('Frequency')
         plt.ylabel('Magnitude (dB)')
         plt.title('Log-Magnitude')
         plt.legend()
-        plt.subplot(1, 2, 2)
-        plt.plot(xdata, np.angle(ydata),           label='Original')
-        plt.plot(xdata, np.angle(ydata_remove_bg), label='Corrected')
+        plt.grid(True, alpha=0.3)
+
+        # 2. Phase Plot
+        plt.subplot(1, 3, 2)
+        plt.plot(xdata, np.angle(ydata), label='Original Phase', color='gray', linestyle='--')
+        plt.plot(xdata, np.angle(ydata_remove_bg), label='Unchanged Phase', alpha=0.6)
         plt.xlabel('Frequency')
         plt.ylabel('Phase (rad)')
-        plt.title('Phase')
+        plt.title('Phase (Should be identical)')
         plt.legend()
+        plt.grid(True, alpha=0.3)
+
+        # 3. Complex Circle (IQ Plot)
+        plt.subplot(1, 3, 3)
+        plt.plot(np.real(ydata), np.imag(ydata), label='Original Circle', color='gray', alpha=0.5)
+        plt.plot(np.real(ydata_remove_bg), np.imag(ydata_remove_bg), label='Corrected Circle', color='red', linewidth=2)
+        plt.xlabel('Real')
+        plt.ylabel('Imag')
+        plt.title('Complex IQ Plane')
+        plt.axis('equal') # Ensures the circle looks like a circle
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+
         plt.tight_layout()
         plt.show()
 
