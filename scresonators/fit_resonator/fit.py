@@ -112,7 +112,7 @@ def find_initial_guess(
         raise ValueError(f"Error shifting data into canonical position: {e}")
 
     try:
-        phi      = np.angle(-z_c) # phi is postive when z_c is at the third quadrant
+        phi      = np.angle(-z_c) # phi is postive when z_c is located in the third quadrant
         ydata    = ydata * np.exp(-1j * phi)
         freq_idx = np.argmin(np.abs(ydata))
         f_c      = x[freq_idx]
@@ -129,21 +129,26 @@ def find_initial_guess(
         Q     = f_c / kappa
         Qc    = Q / Q_over_Qc
 
+        # print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz, corresponding to the index of {freq_idx}')
+        # print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
+        # print(f'Initial guess shows that Q = {Q:.0f}.')
+        # print(f'Initial guess shows that Qc = {Qc:.0f}.')    
+
         popt, _ = spopt.curve_fit(
-            ff.one_cavity_peak_abs,
+            ff.one_cavity_peak,
             x,
             np.abs(ydata),
             p0=[Q, Qc, f_c],
-            bounds=([1e1, 1e1, 4e9], [1e9, 1e9, 8e9]) # bounds=( [min_Q, min_Qc, min_fc], [max_Q, max_Qc, max_fc] )
-        )
+            bounds=([Q*0.5, Qc*0.5, f_c-kappa], [Q*1.5, Qc*1.5, f_c+kappa])) # bounds=( [min_Q, min_Qc, min_fc], [max_Q, max_Qc, max_fc] )
         Q, Qc = popt[0], popt[1]
         f_c = popt[2]
+
         init_guess = [Q, Qc, f_c, phi]
 
-        print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz.')
-        print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
-        print(f'Initial guess shows that Q = {Q:.0f}.')
-        print(f'Initial guess shows that Qc = {Qc:.0f}.')      
+        # print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz, corresponding to the index of {freq_idx}')
+        # print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
+        # print(f'Initial guess shows that Q = {Q:.0f}.')
+        # print(f'Initial guess shows that Qc = {Qc:.0f}.')      
 
     except Exception as e:
         print(e)
