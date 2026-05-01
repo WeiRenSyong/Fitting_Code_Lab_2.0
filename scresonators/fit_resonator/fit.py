@@ -81,8 +81,8 @@ def find_circle(
 
 def find_initial_guess(
         x, 
-        y1, 
-        y2, 
+        y1, # real part
+        y2, # imaginary part
         Method, 
         output_path, 
         plot_extra):
@@ -90,7 +90,7 @@ def find_initial_guess(
     Determine initial guess for DCM parameters: [Q, Qc, f_c, phi]
     """
     if Method.method != "DCM":
-        raise ValueError("This lab fork currently supports DCM only.")
+        raise ValueError("It currently supports DCM only.")
 
     try:
         y  = y1 + 1j * y2
@@ -105,9 +105,6 @@ def find_initial_guess(
     except Exception as e:
         raise ValueError(f"Problem in find_circle(): {e}")
 
-    if plot_extra:
-        fp.plot(np.real(y), np.imag(y), "circle", output_path, np.real(z_c), np.imag(z_c), r)
-
     try:
         ydata = y - 1
         z_c   = z_c - 1
@@ -115,27 +112,13 @@ def find_initial_guess(
         raise ValueError(f"Error shifting data into canonical position: {e}")
 
     try:
-        phi      = np.angle(-z_c)
+        phi      = np.angle(-z_c) # phi is postive when z_c is at the third quadrant
         ydata    = ydata * np.exp(-1j * phi)
         freq_idx = np.argmax(np.abs(ydata))
         f_c      = x[freq_idx]
-
-        if plot_extra:
-            fp.plot(np.real(ydata), np.imag(ydata), "resonance", output_path,
-                    np.real(z_c), np.imag(z_c), r,
-                    np.real(ydata[freq_idx]), np.imag(ydata[freq_idx]))
-
         z_c = z_c * np.exp(-1j * phi)
-
-        if plot_extra:
-            fp.plot(np.real(ydata), np.imag(ydata), "phi", output_path,
-                    np.real(z_c), np.imag(z_c), r,
-                    np.real(ydata[freq_idx]), np.imag(ydata[freq_idx]))
     except Exception as e:
         raise ValueError(f"Error shifting data according to phi: {e}")
-
-    if f_c < 0:
-        raise ValueError("Resonance frequency is negative. Please use positive frequencies only.")
 
     try:
         Q_over_Qc = np.max(np.abs(ydata))
@@ -154,11 +137,12 @@ def find_initial_guess(
             x,
             np.abs(ydata),
             p0=[Q, Qc, f_c],
-            bounds=(0, [np.inf] * 3)
+            bounds=([1e1, 1e1, 4e9], [1e9, 1e9, 8e9]) # bounds=( [min_Q, min_Qc, min_fc], [max_Q, max_Qc, max_fc] )
         )
-
         Q, Qc = popt[0], popt[1]
+        f_c = popt[2]
         init_guess = [Q, Qc, f_c, phi]
+
     except Exception as e:
         print(e)
         raise RuntimeError(
