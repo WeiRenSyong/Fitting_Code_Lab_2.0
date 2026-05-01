@@ -1,7 +1,5 @@
 
-'''
-    helper_fit.py
-'''
+'''helper_fit.py'''
 
 import os
 import sys
@@ -95,6 +93,7 @@ def fit_single_res(
 def fit_qiqcfc_vs_power(
         filenames, 
         powers,
+        atten=[0, 70],
         preprocess_method='circle', 
         phi0=0., 
         data_dir='', 
@@ -124,8 +123,6 @@ def fit_qiqcfc_vs_power(
     Q = np.zeros(Npts)
     Q_err =np.zeros(Npts)
 
-    errs = np.zeros(Npts)
-
     for idx, filename in enumerate(filenames):
         manual_init = manual_init_list[idx]
         
@@ -148,7 +145,7 @@ def fit_qiqcfc_vs_power(
         Qi[idx] = Qij
         fc[idx] = params[2] / fscale
         # Intentionally use Qc[0] and fc[0] as reference values for photon-number conversion
-        navg[idx] = power_to_navg(powers[idx], Qi[idx], Qc[0], fc[0])
+        navg[idx] = power_to_navg(powers[idx], Qi[idx], Qc[0], fc[0]) +np.sum(atten)
 
         Qi_err[idx] = conf_int[1]
         Qc_err[idx] = conf_int[2]
@@ -378,7 +375,7 @@ def power_sweep_fit_drv(
         save_fit_dirs="fits/",
         data_dir=None,
         
-        plot_fit=False,
+        plot_fit=True,
         plot_extra=False,
         save_dcm_plot=False,
         show_plots=False,
@@ -388,11 +385,11 @@ def power_sweep_fit_drv(
         loss_scale=None,
 
         preprocess_method='circle',
-        ds={'QHP': 7.2e4, 'nc': 1e1, 'Fdtls': 1e-6},
-        plot_twinx=True,
-        QHP_fix=False,
+        ds={'QHP': 1.0e6, 'nc': 1, 'Fdtls': 1e-5},
+        plot_twinx=False,
+        QHP_fix=True,
         manual_init_list=None,
-        show_dbm=False,
+        show_dbm=True,
 
         tls_fit_init=None, 
         tls_fit_bounds=None,):
@@ -424,6 +421,7 @@ def power_sweep_fit_drv(
     df = fit_qiqcfc_vs_power(
         filenames, 
         powers,
+        atten=atten,
         preprocess_method=preprocess_method,
         phi0=phi0,
         data_dir=data_dir,
@@ -443,7 +441,7 @@ def power_sweep_fit_drv(
     Qc = np.asarray(df['Qc'])
     Qc_err = np.asarray(df['Qc error'])
     Q = np.asarray(df['Q'])
-    Q_err = np.sqrt((Q/Qi)**4*Qi_err**2+(Q/Qc)**4*Qc_err**2)
+    Q_err = np.asarray(df['Q error'])
 
     delta = 1.0 / Qi
     delta_err = Qi_err / Qi**2
