@@ -106,18 +106,30 @@ def find_initial_guess(
         raise ValueError(f"Problem initializing data in find_initial_guess(): {e}")
 
     try:
-        x_c, y_c, r = find_circle(y1, y2)
+        y = y1 + 1j * y2
+        mag = np.abs(y)
+        freq_idx = np.argmin(mag)
+        f_c_guess = x[freq_idx]
+
+        n_circle = min(101, len(x))   # local window size; must be odd-ish and not exceed data length
+        half = n_circle // 2
+
+        idx1 = max(freq_idx - half, 0)
+        idx2 = min(freq_idx + half + 1, len(x))
+
+        if (idx2 - idx1) < 10:
+            raise RuntimeError("Not enough local points for circle fit.")
+
+        x_c, y_c, r = find_circle(y1[idx1:idx2], y2[idx1:idx2])
         z_c = x_c + 1j * y_c
     except Exception as e:
         raise ValueError(f"Problem in find_circle(): {e}")
     
     try:
         phi = np.angle(-z_c)
-        mag = np.abs(y)
-        freq_idx = np.argmin(mag)
-        f_c = x[freq_idx]
+        f_c = f_c_guess
 
-        mag_wing = [mag[:5], mag[-5:]]
+        mag_wing = np.r_[mag[:5], mag[-5:]]
         off_mag = np.mean(mag_wing)
         mag_norm = mag / off_mag
 
@@ -127,9 +139,9 @@ def find_initial_guess(
         if depth <= 0:
             raise RuntimeError("No visible resonance dip after normalization.")
 
-        Q_over_Qc = depth   # Q_over_Qc indicates the how deep of the resonance dip
+        Q_over_Qc = np.clip(depth, 0.02, 0.95)   # Q_over_Qc indicates the how deep of the resonance dip
 
-        half_level = dip + depth / np.sqrt(2)
+        half_level = dip + depth / 2
 
         left = np.where(mag_norm[:freq_idx] > half_level)[0]
         right = np.where(mag_norm[freq_idx:] > half_level)[0]
@@ -144,21 +156,23 @@ def find_initial_guess(
         Q = f_c / kappa
         Qc = Q / Q_over_Qc  
 
-        plt.figure()
-        plt.plot(x/1e9, np.abs(y), '.')
-        plt.axvline(f_c/1e9, color='r')
-        plt.xlabel("Frequency [GHz]")
-        plt.ylabel("|S21|")
-        plt.title("Data entering initial guess")
-        plt.show()
+        # plt.figure()
+        # plt.plot(x/1e9, np.abs(y), '.')
+        # plt.axvline(f_c/1e9, color='r')
+        # plt.xlabel("Frequency [GHz]")
+        # plt.ylabel("|S21|")
+        # plt.title("Data entering initial guess")
+        # plt.show()
 
-        # popt, _ = spopt.curve_fit(
-        #     ff.one_cavity_peak,
-        #     x,
-        #     y,
-        #     p0=[Q, Qc, f_c],
-        #     bounds=([0, 0, np.min(x)], [np.inf, np.inf, np.max(x)]))
-        # Q, Qc, f_c = popt[0], popt[1], popt[2]
+        fit_mask = (x > f_c - 5 * kappa) & (x < f_c + 5 * kappa)
+
+        popt, _ = spopt.curve_fit(
+            ff.one_cavity_peak_abs,
+            x[fit_mask],
+            np.abs(y[fit_mask]),
+            p0=[Q, Qc, f_c],
+            bounds=([0, 0, x[fit_mask].min()], [np.inf, np.inf, x[fit_mask].max()])
+        )
 
         init_guess = [Q, Qc, f_c, phi]
 
@@ -470,6 +484,10 @@ def min_fit(
     # Confidence intervals
     try:
         p_names = [name for name in params if name not in Method.MC_fix]
+        if not result.success:
+            print(">Fit did not converge cleanly; confidence intervals set to 0.0")
+            return fit_params, [0, 0, 0, 0, 0, 0]
+
         ci = lmfit.conf_interval(minner, result, p_names=p_names, sigmas=[2])
 
         # Q confidence
@@ -648,7 +666,7 @@ def fit(
         params = lmfit.Parameters()
         params.add('Q',   value=init[0], vary=change_Q,   min=init[0] * 0.5, max=init[0] * 1.5)
         params.add('Qc',  value=init[1], vary=change_Qc,  min=init[1] * 0.3, max=init[1] * 1.3)
-        params.add('w1',  value=init[2], vary=change_w1,  min=init[2] * 0.5, max=init[2] * 1.5)
+        params.add('w1',  value=init[2], vary=change_w1, min=np.min(xdata), max=np.max(xdata))
         params.add('phi', value=init[3], vary=change_phi, min=-np.pi,          max=np.pi)
     except Exception as e:
         raise ValueError(f"Failed to define lmfit parameters: {e}")
@@ -690,8 +708,7 @@ def fit(
                         min=output_params[0] * 0.5, max=output_params[0] * 1.5)
             params2.add('Qc',  value=output_params[1], vary=change_Qc,
                         min=output_params[1] * 0.8, max=output_params[1] * 1.2)
-            params2.add('w1',  value=output_params[2], vary=change_w1,
-                        min=output_params[2] * 0.9, max=output_params[2] * 1.1)
+            params2.add('w1', value=output_params[2], vary=change_w1, min=np.min(xdata), max=np.max(xdata))
             params2.add('phi', value=output_params[3], vary=change_phi,
                         min=output_params[3] * 0.9, max=output_params[3] * 1.1)
             output_params, conf_array = min_fit(params2, xdata, ydata, Method)
@@ -736,7 +753,7 @@ def fit(
                 extract_factor, title=title,
                 manual_params=Method.manual_init
             )
-            myres.plot = 'png' if save_dcm_plot else None
+            resonator.plot = 'png' if getattr(resonator, "save_dcm_plot", False) else 'png'
         except Exception as e:
             raise RuntimeError(f"Failed to plot DCM fit: {e}")
 
@@ -751,5 +768,11 @@ def fit(
                 f"Unrecognised file format '{resonator.plot}'. "
                 f"Please use png, pdf, ps, eps or svg. ({e})"
             )
+        
+    print("=== Raw data diagnostic ===")
+    print(f"x range: {xdata.min()/1e9:.6f} to {xdata.max()/1e9:.6f} GHz")
+    print(f"phase min/max before unwrap: {data.phases.min():.3f}, {data.phases.max():.3f}")
+    print(f"phase min/max after unwrap: {phases.min():.3f}, {phases.max():.3f}")
+    print(f"linear amp min/max: {linear_amps.min():.3e}, {linear_amps.max():.3e}")
 
     return output_params, conf_array, error, init, output_path

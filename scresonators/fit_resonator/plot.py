@@ -120,6 +120,11 @@ def create_metadata(
         writer.writerow(vals)
     # BUG FIX: removed redundant file.close() — 'with' handles it
 
+def round_sigfig(v, n):
+    if not np.isfinite(v) or v == 0:
+        return 0.0
+    return round(v, n - int(np.floor(np.log10(abs(v)))) - 1)
+
 def PlotFit(
         x, 
         y, 
@@ -195,8 +200,6 @@ def PlotFit(
     fig.set_tight_layout(True)
 
     msize1, msize2 = msizes
-
-    round_sigfig = lambda v, n: round(v, n - int(np.floor(np.log10(abs(v)))) - 1)
 
     # ── Manual parameter display (DCM only) ───────────────────────────────
     if manual_params is not None:
@@ -292,9 +295,15 @@ def PlotFit(
                     continue    # placeholder to keep conf_array indices aligned
                 vscale = fcscale if val == r'$f_c$' else 1.
                 idx    = reports.index(val)
-                err    = round_sigfig(conf_array[idx] / vscale, 1)
-                v      = p_ref[idx] / vscale
-                un     = uncertainties.ufloat(v, err)
+                err = round_sigfig(conf_array[idx] / vscale, 1)
+                v   = p_ref[idx] / vscale
+
+                if not np.isfinite(v):
+                    v = 0.0
+                if not np.isfinite(err):
+                    err = 0.0
+
+                un = uncertainties.ufloat(v, err)
                 textstr += r'%s: $%s$' % (val, f'{un:L}')
                 if   val == r'$\phi$': textstr += ' radians'
                 elif val == r'$f_c$':  textstr += ' GHz'
