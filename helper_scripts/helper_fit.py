@@ -151,10 +151,11 @@ def fit_qiqcfc_vs_power(
         Q[idx] = params[0]
         fscale = 1e9 if params[2] > 1e9 else 1
         Qc[idx] = np.real(Qcj)
-        Qi[idx] = Qij
+        Qi[idx] = np.real(Qij)
         fc[idx] = params[2] / fscale
         # Intentionally use Qc[0] and fc[0] as reference values for photon-number conversion
-        navg[idx] = power_to_navg(powers[idx], Qi[idx], Qc[0], fc[0]) +np.sum(atten)
+        navg_val = power_to_navg(powers[idx], Qi[idx], Qc[0], fc[0])
+        navg[idx] = np.real(navg_val) + np.sum(atten)
 
         Qi_err[idx] = conf_int[1]
         Qc_err[idx] = conf_int[2]
@@ -373,7 +374,7 @@ def power_to_navg(
     Q = 1. / ((1. / Qi) + (1. / Qc))
     navg = (2. / hb_wc2) * (Q**2 / Qc) * Papp
 
-    return navg
+    return np.real(navg)
 
 def power_sweep_fit_drv(
         sample_name=None,

@@ -142,7 +142,7 @@ def find_initial_guess(
 
         kappa = abs(x[idx2] - x[idx1])   # linewidth of the resonance
         Q = f_c / kappa
-        Qc    = Q / Q_over_Qc  
+        Qc = Q / Q_over_Qc  
 
         plt.figure()
         plt.plot(x/1e9, np.abs(y), '.')
@@ -152,13 +152,13 @@ def find_initial_guess(
         plt.title("Data entering initial guess")
         plt.show()
 
-        popt, _ = spopt.curve_fit(
-            ff.one_cavity_peak,
-            x,
-            y,
-            p0=[Q, Qc, f_c],
-            bounds=([0, 0, np.min(x)], [np.inf, np.inf, np.max(x)]))
-        Q, Qc, f_c = popt[0], popt[1], popt[2]
+        # popt, _ = spopt.curve_fit(
+        #     ff.one_cavity_peak,
+        #     x,
+        #     y,
+        #     p0=[Q, Qc, f_c],
+        #     bounds=([0, 0, np.min(x)], [np.inf, np.inf, np.max(x)]))
+        # Q, Qc, f_c = popt[0], popt[1], popt[2]
 
         init_guess = [Q, Qc, f_c, phi]
 
@@ -490,9 +490,12 @@ def min_fit(
             )
 
         # 1/Re[1/Qc] confidence
-        Qc_Re     = 1 / np.real(np.exp(1j * fit_params[3]) / ci['Qc'][1][1])
-        Qc_Re_neg = 1 / np.real(np.exp(1j * fit_params[3]) / ci['Qc'][0][1])
-        Qc_Re_pos = 1 / np.real(np.exp(1j * fit_params[3]) / ci['Qc'][2][1])
+        den = np.real(np.exp(1j * fit_params[3]) / ci['Qc'][1][1])
+        Qc_Re = 1 / den if den != 0 else np.nan
+        den_neg = np.real(np.exp(1j * fit_params[3]) / ci['Qc'][0][1])
+        den_pos = np.real(np.exp(1j * fit_params[3]) / ci['Qc'][2][1])
+        Qc_Re_neg = 1 / den_neg if den_neg != 0 else np.nan
+        Qc_Re_pos = 1 / den_pos if den_pos != 0 else np.nan
         Qc_Re_conf = max(np.abs(Qc_Re - Qc_Re_neg), np.abs(Qc_Re - Qc_Re_pos))
         if np.isinf(Qc_Re_conf):
             Qc_Re_conf = min(np.abs(Qc_Re - Qc_Re_neg), np.abs(Qc_Re - Qc_Re_pos))
@@ -715,11 +718,21 @@ def fit(
         try:
             figurename = f"DCM with Monte Carlo Fit and Raw data\nPower: {filename}"
             title      = "DCM Method Fit"
+            safe_params = [
+                float(v) if np.isfinite(v) else 0.0
+                for v in output_params
+            ]
+
+            safe_conf = [
+                float(v) if np.isfinite(v) else 0.0
+                for v in conf_array
+            ]
+
             fig = fp.PlotFit(
                 x_raw, y_raw, x_initial, y_initial,
                 slope, intercept, slope2, intercept2,
-                output_params, Method, error, figurename,
-                x_c, y_c, r, output_path, conf_array,
+                safe_params, Method, error, figurename,
+                x_c, y_c, r, output_path, safe_conf,
                 extract_factor, title=title,
                 manual_params=Method.manual_init
             )
