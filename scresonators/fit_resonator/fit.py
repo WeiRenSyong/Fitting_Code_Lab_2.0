@@ -604,8 +604,14 @@ def fit(
     try:
         xdata        = data.freqs
         linear_amps  = data.linear_amps
-        phases = data.phases
-        ydata  = np.multiply(linear_amps, np.exp(1j * phases))
+        phases       = data.phases
+
+        sort_idx = np.argsort(xdata)
+        xdata = xdata[sort_idx]
+        linear_amps = linear_amps[sort_idx]
+        phases = phases[sort_idx]
+
+        ydata = np.multiply(linear_amps, np.exp(1j * phases))
     except Exception as e:
         raise ValueError(f"Failed to read resonator data: {e}")
 
@@ -676,7 +682,15 @@ def fit(
         params = lmfit.Parameters()
         params.add('Q',   value=init[0], vary=change_Q,   min=init[0] * 0.5, max=init[0] * 1.5)
         params.add('Qc',  value=init[1], vary=change_Qc,  min=init[1] * 0.3, max=init[1] * 1.3)
-        params.add('w1',  value=init[2], vary=change_w1, min=np.min(xdata), max=np.max(xdata))
+        w1_window = 5 * kappa
+
+        params.add(
+            'w1',
+            value=init[2],
+            vary=change_w1,
+            min=max(np.min(xdata), init[2] - w1_window),
+            max=min(np.max(xdata), init[2] + w1_window)
+        )
         params.add('phi', value=init[3], vary=change_phi, min=-np.pi,          max=np.pi)
     except Exception as e:
         raise ValueError(f"Failed to define lmfit parameters: {e}")
@@ -709,6 +723,8 @@ def fit(
             output_params = output_params[MC_counts - 1]
 
     error = min(error)
+    if np.isclose(output_params[2], np.min(xdata)) or np.isclose(output_params[2], np.max(xdata)):
+        print("[WARNING] fitted fc is at sweep boundary → bad fit")
 
     # If MC improved the fit, run a final minimisation on MC parameters
     if output_params[0] != fit_params[0]:
@@ -718,7 +734,15 @@ def fit(
                         min=output_params[0] * 0.5, max=output_params[0] * 1.5)
             params2.add('Qc',  value=output_params[1], vary=change_Qc,
                         min=output_params[1] * 0.8, max=output_params[1] * 1.2)
-            params2.add('w1', value=output_params[2], vary=change_w1, min=np.min(xdata), max=np.max(xdata))
+            w1_window = 5 * kappa
+
+            params2.add(
+                'w1',
+                value=output_params[2],
+                vary=change_w1,
+                min=max(np.min(xdata), init[2] - w1_window),
+                max=min(np.max(xdata), init[2] + w1_window)
+            )
             params2.add('phi', value=output_params[3], vary=change_phi,
                         min=output_params[3] * 0.9, max=output_params[3] * 1.1)
             output_params, conf_array = min_fit(params2, xdata, ydata, Method)
