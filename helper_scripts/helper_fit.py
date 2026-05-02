@@ -150,8 +150,17 @@ def fit_qiqcfc_vs_power(
 
         Q[idx] = params[0]
         fscale = 1e9 if params[2] > 1e9 else 1
-        Qc[idx] = np.real(Qcj)
-        Qi[idx] = np.real(Qij)
+        Qi_val = np.real(Qij)
+        Qc_val = np.real(Qcj)
+
+        if not np.isfinite(Qi_val) or not np.isfinite(Qc_val) or Qi_val <= 0 or Qc_val <= 0:
+            print(f"[WARNING] Bad fit at power {powers[idx]} dBm → skipping")
+            Qi[idx] = np.nan
+            Qc[idx] = np.nan
+        else:
+            Qi[idx] = Qi_val
+            Qc[idx] = Qc_val
+        
         fc[idx] = params[2] / fscale
         # Intentionally use Qc[0] and fc[0] as reference values for photon-number conversion
         navg_val = power_to_navg(powers[idx], Qi[idx], Qc[0], fc[0])
@@ -273,7 +282,16 @@ def fit_delta_tls(
         x0 = fit_init if fit_init is not None else [2.2e5, 1.0, 0.25]
 
         if fit_bounds is None:
-            popt, pcov = sp.optimize.curve_fit(fitfun_fixed, navg, delta, p0=x0)
+            valid = np.isfinite(navg) & np.isfinite(delta)
+
+            navg_fit = navg[valid]
+            delta_fit_data = delta[valid]
+
+            if len(navg_fit) < 4:
+                raise ValueError(f"Not enough valid points for TLS fit: {len(navg_fit)}")
+
+            popt, pcov = sp.optimize.curve_fit(fitfun_fixed, navg_fit, delta_fit_data, p0=x0)
+            print(f"[TLS DEBUG] valid points: {len(navg_fit)} / {len(navg)}")
         else:
             popt, pcov = sp.optimize.curve_fit(
                 fitfun_fixed, navg, delta, p0=x0, bounds=fit_bounds
@@ -372,7 +390,10 @@ def power_to_navg(
 
     # Return the power as average number of photons
     Q = 1. / ((1. / Qi) + (1. / Qc))
-    navg = (2. / hb_wc2) * (Q**2 / Qc) * Papp
+    if Qc <= 0 or Qi <= 0:
+        return np.nan
+
+    navg = (2. / hb_wc2) * (Q**2 / np.abs(Qc)) * Papp
 
     return np.real(navg)
 
@@ -470,8 +491,8 @@ def power_sweep_fit_drv(
     doff = 0
     delta_fit = None
     delta_fit_str = None
-
-    if plot_fit:
+    
+    if plot_fit and len(Qi) >= 4:
         fit_out = fit_delta_tls(
                 Qi, T, fc[0], Qc[0], powers_total,
                 display_scales=ds,
@@ -489,6 +510,9 @@ def power_sweep_fit_drv(
         print(f'F * d0_tls: {Fdtls:.2g} +/- {Fdtls_err:.2g}')
         print(f'nc: {nc:.2g} +/- {nc_err:.2g}')
         print()
+
+    else:
+        print("[INFO] Skipping TLS fit (not enough power points)")
 
     if loss_scale:
         delta /= loss_scale

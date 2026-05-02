@@ -139,7 +139,7 @@ def find_initial_guess(
         if depth <= 0:
             raise RuntimeError("No visible resonance dip after normalization.")
 
-        Q_over_Qc = np.clip(depth, 0.02, 0.95)   # Q_over_Qc indicates the how deep of the resonance dip
+        Q_over_Qc = np.clip(depth, 1e-4, 0.95)   # Q_over_Qc indicates the how deep of the resonance dip
 
         half_level = dip + depth / 2
 
@@ -274,14 +274,13 @@ def fit_phase(
 
     phase = np.unwrap(np.angle(z_data))
 
-    if np.max(phase) - np.min(phase) <= 0.5 * 2 * np.pi:
-        logging.warning(
-            "Data does not cover a full circle."
-            "Increase the frequency span?"
-        )
-        roll_off = np.max(phase) - np.min(phase)
-    else:
-        roll_off = 2 * np.pi
+    phase_span = np.max(phase) - np.min(phase)
+
+    if phase_span < 0.3:   # <<<< critical threshold (~17 deg)
+        logging.warning("Phase span too small — skipping phase-based delay fit")
+        return guesses if guesses is not None else (f_data[np.argmax(np.abs(np.gradient(phase)))], 1e4, 0.0, 0.0)
+
+    roll_off = phase_span
 
     if guesses is None:
         phase_smooth = gaussian_filter1d(phase, 30)
@@ -358,8 +357,7 @@ def remove_f_dep_background(
         xdata, 
         ydata):
     n_edge = max(5, len(xdata)//20)
-    off_mag = np.mean(np.r_[xdata[:n_edge], xdata[-n_edge:]])
-
+    off_mag = np.mean(np.r_[np.abs(ydata[:n_edge]), np.abs(ydata[-n_edge:])])
     ydata_norm = ydata / off_mag
 
     return xdata, ydata_norm
@@ -416,8 +414,20 @@ def preprocess_circle(
     """Circle-based preprocessing with frequency-dependent background removal."""
     xdata, ydata = remove_f_dep_background(xdata, ydata)
 
-    delay  = fit_delay(xdata, ydata)
+    # delay  = fit_delay(xdata, ydata)
+    phase_span = np.max(np.angle(ydata)) - np.min(np.angle(ydata))
+
+    if phase_span < 0.3:
+        delay = 0.0
+    else:
+        delay = fit_delay(xdata, ydata)
+
     z_data = ydata * np.exp(2j * np.pi * delay * xdata)
+
+    print(f"[DEBUG] delay = {delay:.3e}")
+
+    # TEMP: disable delay to test
+    z_data = ydata  # <-- comment out delay application
 
     delay_remaining, a, alpha, theta, phi, fr, Ql = calibrate(xdata, z_data)
     z_norm = normalize(xdata, z_data, delay_remaining, a, alpha)
@@ -594,8 +604,8 @@ def fit(
     try:
         xdata        = data.freqs
         linear_amps  = data.linear_amps
-        phases       = np.unwrap(data.phases)
-        ydata        = np.multiply(linear_amps, np.exp(1j * phases))
+        phases = data.phases
+        ydata  = np.multiply(linear_amps, np.exp(1j * phases))
     except Exception as e:
         raise ValueError(f"Failed to read resonator data: {e}")
 
