@@ -104,9 +104,70 @@ def fit_single_res(
 
     return params, err, conf_intervals, fig
 
-def fit_qiqcfc_vs_power(
-        filenames, 
+def fit_single_power_list(
+        filenames,
         powers,
+        preprocess_method='circle',
+        phi0=0.,
+        data_dir='',
+        show_plots=False,
+        save_dcm_plot=True,
+        save_fit_dirs=r"fits/",
+        manual_init_list=None,
+        plot_extra=False):
+    """
+    Fit each power independently and return fitted parameters.
+    """
+
+    # if len(filenames) != len(powers):
+    #     raise ValueError(f"Length mismatch: {len(filenames)=}, {len(powers)=}")
+
+    if manual_init_list is None:
+        manual_init_list = [None] * len(filenames)
+
+    results = []
+
+    for idx, filename in enumerate(filenames):
+        print(f"\n[SINGLE POWER FIT] {filename}")
+
+        params, err, conf_int, fig = fit_single_res(
+            filename,
+            preprocess_method=preprocess_method,
+            data_dir=data_dir,
+            save_dcm_plot=save_dcm_plot,
+            save_fit_dirs=save_fit_dirs,
+            manual_init=manual_init_list[idx],
+            plot_extra=plot_extra
+        )
+
+        Qcj = params[1] * np.exp(1j * (params[3] + phi0))
+        Qij = 1.0 / (1.0 / params[0] - np.real(1.0 / Qcj))
+
+        results.append({
+            "filename": filename,
+            "power": powers[idx],
+            "params": params,
+            "err": err,
+            "conf_int": conf_int,
+            "Q": params[0],
+            "Qi": np.real(Qij),
+            "Qc": np.real(Qcj),
+            "fc": params[2],
+            "phi": params[3],
+            "fig": fig,
+        })
+
+        if show_plots:
+            fig.show()
+        else:
+            plt.close('all')
+
+    return results
+
+def fit_qiqcfc_vs_power(
+        filenames=None, 
+        powers=None,
+        single_fit_results=None,
         atten=[0, 70],
         preprocess_method='circle', 
         phi0=0., 
@@ -119,9 +180,6 @@ def fit_qiqcfc_vs_power(
     """
     Fits multiple resonances at different powers for a given resonator.
     """
-
-    if len(filenames) != len(powers):
-        raise ValueError(f"Length mismatch: {len(filenames)=}, {len(powers)=}")
 
     if manual_init_list is None:
         manual_init_list = [None] * len(filenames)
@@ -137,17 +195,33 @@ def fit_qiqcfc_vs_power(
     Q = np.zeros(Npts)
     Q_err =np.zeros(Npts)
 
-    for idx, filename in enumerate(filenames):
-        manual_init = manual_init_list[idx]
+    if single_fit_results is not None:
+        filenames = [r["filename"] for r in single_fit_results]
+        powers = [r["power"] for r in single_fit_results]
 
-        params, err, conf_int, fig = fit_single_res(
-            filename,
-            preprocess_method=preprocess_method,
-            data_dir=data_dir,
-            save_dcm_plot=save_dcm_plot,
-            save_fit_dirs=save_fit_dirs,
-            manual_init=manual_init,
-            plot_extra=plot_extra,)
+    if len(filenames) != len(powers):
+        raise ValueError(f"Length mismatch: {len(filenames)=}, {len(powers)=}")
+
+    for idx, filename in enumerate(filenames):
+
+        if single_fit_results is None:
+            manual_init = manual_init_list[idx]
+
+            params, err, conf_int, fig = fit_single_res(
+                filename,
+                preprocess_method=preprocess_method,
+                data_dir=data_dir,
+                save_dcm_plot=save_dcm_plot,
+                save_fit_dirs=save_fit_dirs,
+                manual_init=manual_init,
+                plot_extra=plot_extra
+            )
+        else:
+            r = single_fit_results[idx]
+            params = r["params"]
+            err = r["err"]
+            conf_int = r["conf_int"]
+            fig = r["fig"]
 
         Qcj = params[1] * np.exp(1j * (params[3] + phi0))
         Qij = 1.0 / (1.0 / params[0] - np.real(1.0 / Qcj))
@@ -462,9 +536,21 @@ def power_sweep_fit_drv(
     csize = 5
 
     # Perform resonator fits
-    df = fit_qiqcfc_vs_power(
-        filenames, 
+    single_fit_results = fit_single_power_list(
+        filenames,
         powers,
+        preprocess_method=preprocess_method,
+        phi0=phi0,
+        data_dir=data_dir,
+        show_plots=show_plots,
+        save_dcm_plot=True,
+        save_fit_dirs=save_fit_dirs,
+        manual_init_list=manual_init_list,
+        plot_extra=plot_extra
+    )
+
+    df = fit_qiqcfc_vs_power(
+        single_fit_results=single_fit_results,
         atten=atten,
         preprocess_method=preprocess_method,
         phi0=phi0,

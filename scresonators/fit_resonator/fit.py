@@ -112,7 +112,7 @@ def find_initial_guess(
         f_c_guess = x[freq_idx]
 
         # First rough local window around resonance dip
-        n_circle = min(81, len(x))
+        n_circle = min(61, len(x))
         half = n_circle // 2
 
         idx1 = max(freq_idx - half, 0)
