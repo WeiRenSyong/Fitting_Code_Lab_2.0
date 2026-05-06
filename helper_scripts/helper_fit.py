@@ -91,8 +91,7 @@ def fit_single_res(
     print("[DEBUG] helper_fit file:", __file__)
     print("[DEBUG] fit.py file:", fsd.__file__)
     print("[DEBUG] resonator.py file:", res.__file__)
-    print("[DEBUG] has Qc_ref before fit:", hasattr(myres, "Qc_ref"))
-    print("[DEBUG] Qc_ref before fit:", getattr(myres, "Qc_ref", None))
+
     # params, conf_intervals, err, init1, fig = fsd.fit(myres)
     fit_result = fsd.fit(myres)
     if fit_result is None:

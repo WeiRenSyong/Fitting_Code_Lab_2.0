@@ -121,45 +121,9 @@ def find_initial_guess(
         if (idx2 - idx1) < 20:
             raise RuntimeError("Not enough local points for rough circle fit.")
 
-        z_local = y[idx1:idx2]
-
-        # Rough circle from local resonance region
-        x_c0, y_c0, r0 = find_circle(np.real(z_local), np.imag(z_local))
-        z_c0 = x_c0 + 1j * y_c0
-
-        # Use circle angle to remove over-concentrated off-resonance points
-        angles = np.unwrap(np.angle(z_local - z_c0))
-
-        n_bins = 16
-        max_per_bin = 6
-
-        bins = np.linspace(np.min(angles), np.max(angles), n_bins + 1)
-
-        keep_local = []
-
-        for b0, b1 in zip(bins[:-1], bins[1:]):
-            inds = np.where((angles >= b0) & (angles < b1))[0]
-
-            if len(inds) == 0:
-                continue
-
-            # keep only a few points per angle bin
-            if len(inds) > max_per_bin:
-                pick = np.linspace(0, len(inds) - 1, max_per_bin).astype(int)
-                inds = inds[pick]
-                # params.add('Q', value=init[0], vary=change_Q, min=init[0] * 0.1, max=init[0] * 3.0)
-
-            keep_local.extend(inds)
-
-        keep_local = np.asarray(keep_local, dtype=int)
-
-        if len(keep_local) < 20:
-            raise RuntimeError("Not enough angle-distributed points for circle fit.")
-
-        z_circle = z_local[keep_local]
-
         x_c, y_c, r = find_circle(y1[idx1:idx2], y2[idx1:idx2])
         z_c = x_c + 1j * y_c
+
     except Exception as e:
         raise ValueError(f"Problem in find_circle(): {e}")
     
@@ -719,9 +683,9 @@ def fit(
     w1_window = 5 * kappa
     try:
         params = lmfit.Parameters()
-        params.add('Q',   value=init[0], vary=change_Q,   min=init[0] * 0.5, max=init[0] * 1.5)
+        params.add('Q',  value=init[0], vary=change_Q,   min=init[0] * 0.1, max=init[0] * 10.0)
 
-        params.add('Qc', value=init[1], vary=change_Qc, min=init[1] * 0.05, max=init[1] * 5.0)
+        params.add('Qc', value=init[1], vary=change_Qc, min=init[1] * 0.1, max=init[1] * 10.0)
         params.add(
             'w1',
             value=init[2],
@@ -768,8 +732,8 @@ def fit(
     if output_params[0] != fit_params[0]:
         try:
             params2 = lmfit.Parameters()
-            params2.add('Q',  value=output_params[0], vary=change_Q, min=output_params[0] * 0.1, max=output_params[0] * 3.0)
-            params2.add('Qc', value=output_params[1], vary=change_Qc, min=output_params[1] * 0.05, max=output_params[1] * 5.0)
+            params2.add('Q',  value=output_params[0], vary=change_Q, min=output_params[0] * 0.1, max=output_params[0] * 10.0)
+            params2.add('Qc', value=output_params[1], vary=change_Qc, min=output_params[1] * 0.1, max=output_params[1] * 10.0)
             w1_window = 5 * kappa
 
             params2.add(
