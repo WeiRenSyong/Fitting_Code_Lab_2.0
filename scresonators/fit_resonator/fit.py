@@ -111,16 +111,53 @@ def find_initial_guess(
         freq_idx = np.argmin(mag)
         f_c_guess = x[freq_idx]
 
-        n_circle = min(101, len(x))   # local window size; must be odd-ish and not exceed data length
+        # First rough local window around resonance dip
+        n_circle = min(81, len(x))
         half = n_circle // 2
 
         idx1 = max(freq_idx - half, 0)
         idx2 = min(freq_idx + half + 1, len(x))
 
-        if (idx2 - idx1) < 10:
-            raise RuntimeError("Not enough local points for circle fit.")
+        if (idx2 - idx1) < 20:
+            raise RuntimeError("Not enough local points for rough circle fit.")
 
-        x_c, y_c, r = find_circle(y1[idx1:idx2], y2[idx1:idx2])
+        z_local = y[idx1:idx2]
+
+        # Rough circle from local resonance region
+        x_c0, y_c0, r0 = find_circle(np.real(z_local), np.imag(z_local))
+        z_c0 = x_c0 + 1j * y_c0
+
+        # Use circle angle to remove over-concentrated off-resonance points
+        angles = np.unwrap(np.angle(z_local - z_c0))
+
+        n_bins = 16
+        max_per_bin = 6
+
+        bins = np.linspace(np.min(angles), np.max(angles), n_bins + 1)
+
+        keep_local = []
+
+        for b0, b1 in zip(bins[:-1], bins[1:]):
+            inds = np.where((angles >= b0) & (angles < b1))[0]
+
+            if len(inds) == 0:
+                continue
+
+            # keep only a few points per angle bin
+            if len(inds) > max_per_bin:
+                pick = np.linspace(0, len(inds) - 1, max_per_bin).astype(int)
+                inds = inds[pick]
+
+            keep_local.extend(inds)
+
+        keep_local = np.asarray(keep_local, dtype=int)
+
+        if len(keep_local) < 20:
+            raise RuntimeError("Not enough angle-distributed points for circle fit.")
+
+        z_circle = z_local[keep_local]
+
+        x_c, y_c, r = find_circle(np.real(z_circle), np.imag(z_circle))
         z_c = x_c + 1j * y_c
     except Exception as e:
         raise ValueError(f"Problem in find_circle(): {e}")
@@ -681,8 +718,21 @@ def fit(
     try:
         params = lmfit.Parameters()
         params.add('Q',   value=init[0], vary=change_Q,   min=init[0] * 0.5, max=init[0] * 1.5)
-        params.add('Qc',  value=init[1], vary=change_Qc,  min=init[1] * 0.3, max=init[1] * 1.3)
-        w1_window = 5 * kappa
+        Qc_ref = getattr(resonator, "Qc_ref", None)
+        Qc_ref_frac = getattr(resonator, "Qc_ref_frac", 0.05)
+
+        if Qc_ref is not None:
+            params.add(
+                'Qc',
+                value=Qc_ref,
+                vary=change_Qc,
+                min=Qc_ref * (1 - Qc_ref_frac),
+                max=Qc_ref * (1 + Qc_ref_frac)
+            )
+        else:
+            params.add('Qc', value=init[1], vary=change_Qc, min=init[1] * 0.05, max=init[1] * 5.0)
+            
+            w1_window = 5 * kappa
 
         params.add(
             'w1',
@@ -732,8 +782,17 @@ def fit(
             params2 = lmfit.Parameters()
             params2.add('Q',   value=output_params[0], vary=change_Q,
                         min=output_params[0] * 0.5, max=output_params[0] * 1.5)
-            params2.add('Qc',  value=output_params[1], vary=change_Qc,
-                        min=output_params[1] * 0.8, max=output_params[1] * 1.2)
+            if Qc_ref is not None:
+                params2.add(
+                    'Qc',
+                    value=Qc_ref,
+                    vary=change_Qc,
+                    min=Qc_ref * (1 - Qc_ref_frac),
+                    max=Qc_ref * (1 + Qc_ref_frac)
+                )
+            else:
+                params2.add('Qc', value=output_params[1], vary=change_Qc,
+                            min=output_params[1] * 0.05, max=output_params[1] * 5.0)
             w1_window = 5 * kappa
 
             params2.add(

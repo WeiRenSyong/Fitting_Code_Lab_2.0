@@ -38,7 +38,9 @@ def fit_single_res(
         save_dcm_plot=False,
         save_fit_dirs=r"fits/", 
         manual_init=None, 
-        plot_extra=False):
+        plot_extra=False,
+        Qc_ref=None,
+        Qc_ref_frac=0.05):
     """
     Fit a single resonator from file.
     """
@@ -76,6 +78,9 @@ def fit_single_res(
         myres.fit_dir = save_fit_dirs[0]
     else:
         myres.fit_dir = save_fit_dirs
+
+    myres.Qc_ref = Qc_ref
+    myres.Qc_ref_frac = Qc_ref_frac
 
     myres.fit_method(
         fit_type,
@@ -132,9 +137,11 @@ def fit_qiqcfc_vs_power(
     Q = np.zeros(Npts)
     Q_err =np.zeros(Npts)
 
+    Qc_ref = None
+
     for idx, filename in enumerate(filenames):
         manual_init = manual_init_list[idx]
-        
+
         params, err, conf_int, fig = fit_single_res(
             filename,
             preprocess_method=preprocess_method,
@@ -142,7 +149,9 @@ def fit_qiqcfc_vs_power(
             save_dcm_plot=save_dcm_plot,
             save_fit_dirs=save_fit_dirs,
             manual_init=manual_init,
-            plot_extra=plot_extra
+            plot_extra=plot_extra,
+            Qc_ref=Qc_ref,
+            Qc_ref_frac=0.05
         )
 
         Qcj = params[1] * np.exp(1j * (params[3] + phi0))
@@ -153,6 +162,10 @@ def fit_qiqcfc_vs_power(
         Qi_val = np.real(Qij)
         Qc_val = np.real(Qcj)
 
+        if idx == 0 and np.isfinite(Qc_val) and Qc_val > 0:
+            Qc_ref = Qc_val
+        print(f"[INFO] Using highest-power Qc_ref = {Qc_ref:.0f}")
+
         if not np.isfinite(Qi_val) or not np.isfinite(Qc_val) or Qi_val <= 0 or Qc_val <= 0:
             print(f"[WARNING] Bad fit at power {powers[idx]} dBm → skipping")
             Qi[idx] = np.nan
@@ -160,11 +173,15 @@ def fit_qiqcfc_vs_power(
         else:
             Qi[idx] = Qi_val
             Qc[idx] = Qc_val
+
+        
         
         fc[idx] = params[2] / fscale
         # Intentionally use Qc[0] and fc[0] as reference values for photon-number conversion
-        navg_val = power_to_navg(powers[idx], Qi[idx], Qc[0], fc[0])
-        navg[idx] = np.real(navg_val) + np.sum(atten)
+        power_at_device = powers[idx] + np.sum(atten)
+
+        navg_val = power_to_navg(power_at_device, Qi[idx], Qc[0], fc[0])
+        navg[idx] = np.real(navg_val)
 
         Qi_err[idx] = conf_int[1]
         Qc_err[idx] = conf_int[2]
@@ -384,16 +401,21 @@ def power_to_navg(
 
     # Convert dBm to W
     Papp = 10**((power_dBm - 30) / 10) # * 1e-3
-    fscale = 1. if fc > 1e9 else 1e9
-    fc_Hz = fc * fscale
+    fc_arr = np.asarray(fc, dtype=float)
+    fscale = np.where(fc_arr > 1e9, 1.0, 1e9)
+    fc_Hz = fc_arr * fscale
     hb_wc2 = hbar * (2 * np.pi * fc_Hz)**2
 
     # Return the power as average number of photons
     Q = 1. / ((1. / Qi) + (1. / Qc))
-    if Qc <= 0 or Qi <= 0:
-        return np.nan
+    Qi_arr = np.asarray(Qi, dtype=float)
+    Qc_arr = np.asarray(Qc, dtype=float)
 
-    navg = (2. / hb_wc2) * (Q**2 / np.abs(Qc)) * Papp
+    bad = (Qi_arr <= 0) | (Qc_arr <= 0) | (~np.isfinite(Qi_arr)) | (~np.isfinite(Qc_arr))
+
+    Q = 1. / ((1. / Qi_arr) + (1. / Qc_arr))
+    navg = (2. / hb_wc2) * (Q**2 / np.abs(Qc_arr)) * Papp
+    navg = np.where(bad, np.nan, navg)
 
     return np.real(navg)
 
