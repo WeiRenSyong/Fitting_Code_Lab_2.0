@@ -181,6 +181,16 @@ def fit_qiqcfc_vs_power(
     Fits multiple resonances at different powers for a given resonator.
     """
 
+    if single_fit_results is not None:
+        filenames = [r["filename"] for r in single_fit_results]
+        powers = [r["power"] for r in single_fit_results]
+
+    if filenames is None or powers is None:
+        raise ValueError("filenames/powers are None and single_fit_results was not provided.")
+
+    if len(filenames) != len(powers):
+        raise ValueError(f"Length mismatch: {len(filenames)=}, {len(powers)=}")
+
     if manual_init_list is None:
         manual_init_list = [None] * len(filenames)
 
@@ -194,13 +204,6 @@ def fit_qiqcfc_vs_power(
     Qc_err = np.zeros(Npts)
     Q = np.zeros(Npts)
     Q_err =np.zeros(Npts)
-
-    if single_fit_results is not None:
-        filenames = [r["filename"] for r in single_fit_results]
-        powers = [r["power"] for r in single_fit_results]
-
-    if len(filenames) != len(powers):
-        raise ValueError(f"Length mismatch: {len(filenames)=}, {len(powers)=}")
 
     for idx, filename in enumerate(filenames):
 

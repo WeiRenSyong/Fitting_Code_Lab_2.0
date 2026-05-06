@@ -147,6 +147,7 @@ def find_initial_guess(
             if len(inds) > max_per_bin:
                 pick = np.linspace(0, len(inds) - 1, max_per_bin).astype(int)
                 inds = inds[pick]
+                # params.add('Q', value=init[0], vary=change_Q, min=init[0] * 0.1, max=init[0] * 3.0)
 
             keep_local.extend(inds)
 
@@ -157,7 +158,7 @@ def find_initial_guess(
 
         z_circle = z_local[keep_local]
 
-        x_c, y_c, r = find_circle(np.real(z_circle), np.imag(z_circle))
+        x_c, y_c, r = find_circle(y1[idx1:idx2], y2[idx1:idx2])
         z_c = x_c + 1j * y_c
     except Exception as e:
         raise ValueError(f"Problem in find_circle(): {e}")
@@ -719,8 +720,6 @@ def fit(
     try:
         params = lmfit.Parameters()
         params.add('Q',   value=init[0], vary=change_Q,   min=init[0] * 0.5, max=init[0] * 1.5)
-        Qc_ref = getattr(resonator, "Qc_ref", None)
-        Qc_ref_frac = getattr(resonator, "Qc_ref_frac", 0.05)
 
         params.add('Qc', value=init[1], vary=change_Qc, min=init[1] * 0.05, max=init[1] * 5.0)
         params.add(
@@ -769,8 +768,7 @@ def fit(
     if output_params[0] != fit_params[0]:
         try:
             params2 = lmfit.Parameters()
-            params2.add('Q',   value=output_params[0], vary=change_Q,
-                        min=output_params[0] * 0.5, max=output_params[0] * 1.5)
+            params2.add('Q',  value=output_params[0], vary=change_Q, min=output_params[0] * 0.1, max=output_params[0] * 3.0)
             params2.add('Qc', value=output_params[1], vary=change_Qc, min=output_params[1] * 0.05, max=output_params[1] * 5.0)
             w1_window = 5 * kappa
 
