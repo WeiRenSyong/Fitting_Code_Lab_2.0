@@ -30,6 +30,7 @@ import helper_misc as hm
 print("helper_fit loaded from:", THIS_FILE)
 print("helper_misc loaded from:", hm.__file__)
 print("fit_resonator.resonator loaded from:", res.__file__)
+print("fit_resonator.fit loaded from:", fsd.__file__)
 
 def fit_single_res(
         filename, 
@@ -164,7 +165,7 @@ def fit_qiqcfc_vs_power(
 
         if idx == 0 and np.isfinite(Qc_val) and Qc_val > 0:
             Qc_ref = Qc_val
-        print(f"[INFO] Using highest-power Qc_ref = {Qc_ref:.0f}")
+            print(f"[INFO] Using highest-power Qc_ref = {Qc_ref:.0f}")
 
         if not np.isfinite(Qi_val) or not np.isfinite(Qc_val) or Qi_val <= 0 or Qc_val <= 0:
             print(f"[WARNING] Bad fit at power {powers[idx]} dBm → skipping")

@@ -714,12 +714,14 @@ def fit(
 
     # ── Step 2: Least-squares minimisation ────────────────────────────────
     xdata, ydata = x_raw, y_raw
-
+    Qc_ref = getattr(resonator, "Qc_ref", None)
+    Qc_ref_frac = getattr(resonator, "Qc_ref_frac", 0.05)
+    w1_window = 5 * kappa
     try:
         params = lmfit.Parameters()
         params.add('Q',   value=init[0], vary=change_Q,   min=init[0] * 0.5, max=init[0] * 1.5)
-        Qc_ref = getattr(resonator, "Qc_ref", None)
-        Qc_ref_frac = getattr(resonator, "Qc_ref_frac", 0.05)
+        # Qc_ref = getattr(resonator, "Qc_ref", None)
+        # Qc_ref_frac = getattr(resonator, "Qc_ref_frac", 0.05)
 
         if Qc_ref is not None:
             params.add(
@@ -731,8 +733,6 @@ def fit(
             )
         else:
             params.add('Qc', value=init[1], vary=change_Qc, min=init[1] * 0.05, max=init[1] * 5.0)
-            
-            w1_window = 5 * kappa
 
         params.add(
             'w1',
