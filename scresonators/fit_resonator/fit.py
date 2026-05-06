@@ -627,7 +627,11 @@ def fit(
     data              = resonator.data
     plot_extra        = resonator.plot_extra
     preprocess_method = resonator.preprocess_method
+    if not hasattr(resonator, "Qc_ref"):
+        resonator.Qc_ref = None
 
+    if not hasattr(resonator, "Qc_ref_frac"):
+        resonator.Qc_ref_frac = 0.05
     # Resolve output directory
     if filepath is not None:
         dir, filename = os.path.split(filepath)
@@ -720,8 +724,8 @@ def fit(
     try:
         params = lmfit.Parameters()
         params.add('Q',   value=init[0], vary=change_Q,   min=init[0] * 0.5, max=init[0] * 1.5)
-        # Qc_ref = getattr(resonator, "Qc_ref", None)
-        # Qc_ref_frac = getattr(resonator, "Qc_ref_frac", 0.05)
+        Qc_ref = getattr(resonator, "Qc_ref", None)
+        Qc_ref_frac = getattr(resonator, "Qc_ref_frac", 0.05)
 
         if Qc_ref is not None:
             params.add(
