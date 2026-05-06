@@ -80,9 +80,6 @@ def fit_single_res(
     else:
         myres.fit_dir = save_fit_dirs
 
-    myres.Qc_ref = Qc_ref
-    myres.Qc_ref_frac = Qc_ref_frac
-
     myres.fit_method(
         fit_type,
         MC_iteration,
@@ -91,6 +88,9 @@ def fit_single_res(
         manual_init=manual_init,
         MC_step_const=0.3
     )
+
+    myres.method_class.Qc_ref = Qc_ref
+    myres.method_class.Qc_ref_frac = Qc_ref_frac
 
     fig = None
     print("[DEBUG] helper_fit file:", __file__)
@@ -167,9 +167,11 @@ def fit_qiqcfc_vs_power(
         Qi_val = np.real(Qij)
         Qc_val = np.real(Qcj)
 
-        if idx == 0 and np.isfinite(Qc_val) and Qc_val > 0:
-            Qc_ref = Qc_val
-            print(f"[INFO] Using highest-power Qc_ref = {Qc_ref:.0f}")
+        Qc_fit_ref = params[1]
+
+        if idx == 0 and np.isfinite(Qc_fit_ref) and Qc_fit_ref > 0:
+            Qc_ref = Qc_fit_ref
+            print(f"[INFO] Using highest-power fitted |Qc| ref = {Qc_ref:.0f}")
 
         if not np.isfinite(Qi_val) or not np.isfinite(Qc_val) or Qi_val <= 0 or Qc_val <= 0:
             print(f"[WARNING] Bad fit at power {powers[idx]} dBm → skipping")
