@@ -39,9 +39,7 @@ def fit_single_res(
         save_dcm_plot=False,
         save_fit_dirs=r"fits/", 
         manual_init=None, 
-        plot_extra=False,
-        Qc_ref=None,
-        Qc_ref_frac=0.05):
+        plot_extra=False,):
     """
     Fit a single resonator from file.
     """
@@ -88,9 +86,6 @@ def fit_single_res(
         manual_init=manual_init,
         MC_step_const=0.3
     )
-
-    myres.method_class.Qc_ref = Qc_ref
-    myres.method_class.Qc_ref_frac = Qc_ref_frac
 
     fig = None
     print("[DEBUG] helper_fit file:", __file__)
@@ -142,8 +137,6 @@ def fit_qiqcfc_vs_power(
     Q = np.zeros(Npts)
     Q_err =np.zeros(Npts)
 
-    Qc_ref = None
-
     for idx, filename in enumerate(filenames):
         manual_init = manual_init_list[idx]
 
@@ -154,10 +147,7 @@ def fit_qiqcfc_vs_power(
             save_dcm_plot=save_dcm_plot,
             save_fit_dirs=save_fit_dirs,
             manual_init=manual_init,
-            plot_extra=plot_extra,
-            Qc_ref=Qc_ref,
-            Qc_ref_frac=0.05
-        )
+            plot_extra=plot_extra,)
 
         Qcj = params[1] * np.exp(1j * (params[3] + phi0))
         Qij = 1.0 / (1.0 / params[0] - np.real(1.0 / Qcj))
@@ -166,12 +156,6 @@ def fit_qiqcfc_vs_power(
         fscale = 1e9 if params[2] > 1e9 else 1
         Qi_val = np.real(Qij)
         Qc_val = np.real(Qcj)
-
-        Qc_fit_ref = params[1]
-
-        if idx == 0 and np.isfinite(Qc_fit_ref) and Qc_fit_ref > 0:
-            Qc_ref = Qc_fit_ref
-            print(f"[INFO] Using highest-power fitted |Qc| ref = {Qc_ref:.0f}")
 
         if not np.isfinite(Qi_val) or not np.isfinite(Qc_val) or Qi_val <= 0 or Qc_val <= 0:
             print(f"[WARNING] Bad fit at power {powers[idx]} dBm → skipping")
