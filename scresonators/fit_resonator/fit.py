@@ -117,58 +117,54 @@ def find_initial_guess(
         y_smooth = y1_smooth + 1j * y2_smooth
         x_c, y_c, r = find_circle(y1_smooth, y2_smooth)
         z_c = x_c + 1j * y_c
-
         
-        mag = np.abs(y_smooth)
+        ###############################################################################
+        #### Determine f_c from the opposite the off-resonance point on the circle ####
+        ###############################################################################
+        theta_off = np.angle(z_off - z_c)
+        z_res_target = z_c + r * np.exp(1j * (theta_off + np.pi))
+        # Pick measured point closest to that opposite-circle target
+        freq_idx = np.argmin(np.abs(y_smooth - z_res_target))
+        f_c = x[freq_idx]   
 
+        ##############################################################################
+        #### Dtermine phi from the rotation of the center of circle around (1, 0) ####
+        ##############################################################################
+        phi = np.angle(-z_c)
+
+        #######################################################
+        #### Estimate Q/Qc from the radius of the circle   ####
+        #######################################################
+        mag = np.abs(y_smooth)
         # Estimate off-resonance point from both frequency wings
         n_edge = 3
         z_off = np.mean(np.r_[y_smooth[:n_edge], y_smooth[-n_edge:]])
-
-        # Resonance point is approximately opposite the off-resonance point on the circle
-        theta_off = np.angle(z_off - z_c)
-        z_res_target = z_c + r * np.exp(1j * (theta_off + np.pi))
-
-        # Pick measured point closest to that opposite-circle target
-        freq_idx = np.argmin(np.abs(y_smooth - z_res_target))
-        f_c_guess = x[freq_idx]   
-
-    except Exception as e:
-        raise ValueError(f"Problem in find_circle(): {e}")
-    
-    try:
-        phi = np.angle(-z_c)
-        f_c = f_c_guess
-
         mag_wing = np.r_[mag[:3], mag[-3:]]
         off_mag = np.mean(mag_wing)
-
         dip_mag = mag[freq_idx]
         depth = off_mag - dip_mag
-
         if depth <= 0:
             raise RuntimeError("No visible resonance dip in magnitude.")
-
         Q_over_Qc = depth / off_mag   # Q_over_Qc indicates the how deep of the resonance dip
 
+        #########################################
+        #### Estimate Q from the fc and FWHM ####
+        #########################################
         half_level = dip_mag + depth / 2
-
         left_idx = np.argmin(np.abs(mag[:freq_idx] - half_level))
         right_idx = np.argmin(np.abs(mag[freq_idx:] - half_level))
-
-
         idx1 = left_idx
         idx2 = freq_idx + right_idx
-
         if idx2 <= idx1:
             raise RuntimeError("Invalid FWHM index ordering.")
-
         kappa = abs(x[idx2] - x[idx1])   # linewidth of the resonance
-
         if kappa <= 0:
-            raise RuntimeError("Invalid linewidth from FWHM.")
-        
+            raise RuntimeError("Invalid linewidth from FWHM.")     
         Q = f_c / kappa
+
+        ####################################################
+        #### Estimate Qc from extracted Q and Q_over_Qc ####
+        ####################################################
         Qc = Q / Q_over_Qc  
 
         print(f'Initial guess before curve fit shows that fc = {f_c/1e9:.6f} GHz')
