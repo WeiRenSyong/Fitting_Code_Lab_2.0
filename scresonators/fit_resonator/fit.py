@@ -24,6 +24,11 @@ sys.path.append(ROOT_DIR)
 np.set_printoptions(precision=4, suppress=True)
 p = inflect.engine()
 
+def find_nearest(
+        array, # Input data
+        value): # The nearest value and its corresponding index we want to find
+    idx = (np.abs(array - value)).argmin()
+    return array[idx], idx
 
 def extract_near_res(
         x_raw: np.ndarray,
@@ -43,6 +48,9 @@ def extract_near_res(
         raise ValueError("Failed to extract data from designated bandwidth")
 
     return x_temp, y_temp
+
+
+
 
 def find_circle(
         x, y):
@@ -81,12 +89,6 @@ def find_circle(
 
     return matrix1 + xavg, matrix2 + yavg, R
 
-def find_nearest(
-        array, # Input data
-        value): # The nearest value and its corresponding index we want to find
-    idx = (np.abs(array - value)).argmin()
-    return array[idx], idx
-
 def find_initial_guess(
         x, # frequency
         y1, # real part
@@ -102,6 +104,9 @@ def find_initial_guess(
         raise ValueError("It currently supports DCM only.")
 
     try:
+        ###########################################################################
+        #### Find the complex circle and determine the center and radius of it ####
+        ###########################################################################
         y = y1 + 1j * y2
         # When the data is high SNR, smooth_sigma can set to 1
         # When the data is moderate SNR, smooth_sigma can set to 2
@@ -110,11 +115,11 @@ def find_initial_guess(
         y1_smooth = gaussian_filter1d(y1, smooth_sigma)
         y2_smooth = gaussian_filter1d(y2, smooth_sigma)
         y_smooth = y1_smooth + 1j * y2_smooth
-
-        mag = np.abs(y_smooth)
-
         x_c, y_c, r = find_circle(y1_smooth, y2_smooth)
         z_c = x_c + 1j * y_c
+
+        
+        mag = np.abs(y_smooth)
 
         # Estimate off-resonance point from both frequency wings
         n_edge = 3
