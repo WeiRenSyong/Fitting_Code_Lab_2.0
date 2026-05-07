@@ -176,9 +176,9 @@ def find_initial_guess(
             raise RuntimeError("Not enough points for magnitude curve_fit refinement.")
         
         popt, _ = spopt.curve_fit(
-            ff.one_cavity_peak,
+            ff.one_cavity_peak_abs,
             x[fit_mask],
-            np.abs(y[fit_mask]),
+            np.abs(y_smooth[fit_mask]),
             p0=[Q, Qc, f_c],
             bounds=([Q*0.5, Q*0.5, x[fit_mask].min()], [Q*1.5, Qc*1.5, x[fit_mask].max()])
         )
