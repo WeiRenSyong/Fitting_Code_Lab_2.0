@@ -121,6 +121,10 @@ def find_initial_guess(
         ###############################################################################
         #### Determine f_c from the opposite the off-resonance point on the circle ####
         ###############################################################################
+        mag = np.abs(y_smooth)
+        # Estimate off-resonance point from both frequency wings
+        n_edge = 3
+        z_off = np.mean(np.r_[y_smooth[:n_edge], y_smooth[-n_edge:]])
         theta_off = np.angle(z_off - z_c)
         z_res_target = z_c + r * np.exp(1j * (theta_off + np.pi))
         # Pick measured point closest to that opposite-circle target
@@ -135,10 +139,7 @@ def find_initial_guess(
         #######################################################
         #### Estimate Q/Qc from the radius of the circle   ####
         #######################################################
-        mag = np.abs(y_smooth)
-        # Estimate off-resonance point from both frequency wings
-        n_edge = 3
-        z_off = np.mean(np.r_[y_smooth[:n_edge], y_smooth[-n_edge:]])
+        
         mag_wing = np.r_[mag[:3], mag[-3:]]
         off_mag = np.mean(mag_wing)
         dip_mag = mag[freq_idx]
