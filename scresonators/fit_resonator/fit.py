@@ -88,41 +88,45 @@ def find_nearest(
     return array[idx], idx
 
 def find_initial_guess(
-        x, 
+        x, # frequency
         y1, # real part
         y2, # imaginary part
-        Method, 
-        output_path, 
-        plot_extra):
+        Method, # DCM
+        ):
     """
-    Determine initial guess for DCM parameters: [Q, Qc, f_c, phi]
+    Determine initial guess for DCM parameters
+    INPUT:  [frequency, real part, imag part, DCM]
+    OUTPUT: [Q, Qc, f_c, phi], [x_c, y_c, r]
     """
     if Method.method != "DCM":
         raise ValueError("It currently supports DCM only.")
 
     try:
-        y  = y1 + 1j * y2
-    except Exception as e:
-        raise ValueError(f"Problem initializing data in find_initial_guess(): {e}")
-
-    try:
         y = y1 + 1j * y2
-        mag = np.abs(y)
-        freq_idx = np.argmin(mag)
-        f_c_guess = x[freq_idx]
+        # When the data is high SNR, smooth_sigma can set to 1
+        # When the data is moderate smoothing, smooth_sigma can set to 2
+        # When the data is low smoothing, smooth_sigma can set to 3
+        smooth_sigma = 2 
+        y1_smooth = gaussian_filter1d(y1, smooth_sigma)
+        y2_smooth = gaussian_filter1d(y2, smooth_sigma)
+        y_smooth = y1_smooth + 1j * y2_smooth
 
-        # First rough local window around resonance dip
-        n_circle = min(61, len(x))
-        half = n_circle // 2
+        mag = np.abs(y_smooth)
 
-        idx1 = max(freq_idx - half, 0)
-        idx2 = min(freq_idx + half + 1, len(x))
-
-        if (idx2 - idx1) < 20:
-            raise RuntimeError("Not enough local points for rough circle fit.")
-
-        x_c, y_c, r = find_circle(y1[idx1:idx2], y2[idx1:idx2])
+        x_c, y_c, r = find_circle(y1_smooth, y2_smooth)
         z_c = x_c + 1j * y_c
+
+        # Estimate off-resonance point from both frequency wings
+        n_edge = 3
+        z_off = np.mean(np.r_[y_smooth[:n_edge], y_smooth[-n_edge:]])
+
+        # Resonance point is approximately opposite the off-resonance point on the circle
+        theta_off = np.angle(z_off - z_c)
+        z_res_target = z_c + r * np.exp(1j * (theta_off + np.pi))
+
+        # Pick measured point closest to that opposite-circle target
+        freq_idx = np.argmin(np.abs(y_smooth - z_res_target))
+        f_c_guess = x[freq_idx]   
 
     except Exception as e:
         raise ValueError(f"Problem in find_circle(): {e}")
@@ -131,57 +135,61 @@ def find_initial_guess(
         phi = np.angle(-z_c)
         f_c = f_c_guess
 
-        mag_wing = np.r_[mag[:5], mag[-5:]]
+        mag_wing = np.r_[mag[:3], mag[-3:]]
         off_mag = np.mean(mag_wing)
-        mag_norm = mag / off_mag
 
-        dip = np.min(mag_norm)
-        depth = 1.0 - dip
+        dip_mag = mag[freq_idx]
+        depth = off_mag - dip_mag
 
         if depth <= 0:
-            raise RuntimeError("No visible resonance dip after normalization.")
+            raise RuntimeError("No visible resonance dip in magnitude.")
 
-        Q_over_Qc = np.clip(depth, 1e-4, 0.95)   # Q_over_Qc indicates the how deep of the resonance dip
+        Q_over_Qc = depth / off_mag   # Q_over_Qc indicates the how deep of the resonance dip
 
-        half_level = dip + depth / 2
+        half_level = dip_mag + depth / 2
 
-        left = np.where(mag_norm[:freq_idx] > half_level)[0]
-        right = np.where(mag_norm[freq_idx:] > half_level)[0]
+        left_idx = np.argmin(np.abs(mag[:freq_idx] - half_level))
+        right_idx = np.argmin(np.abs(mag[freq_idx:] - half_level))
 
-        if len(left) == 0 or len(right) == 0:
-            raise RuntimeError("Could not find both sides of resonance linewidth")
 
-        idx1 = left[-1]
-        idx2 = freq_idx + right[0]
+        idx1 = left_idx
+        idx2 = freq_idx + right_idx
+
+        if idx2 <= idx1:
+            raise RuntimeError("Invalid FWHM index ordering.")
 
         kappa = abs(x[idx2] - x[idx1])   # linewidth of the resonance
+
+        if kappa <= 0:
+            raise RuntimeError("Invalid linewidth from FWHM.")
+        
         Q = f_c / kappa
         Qc = Q / Q_over_Qc  
 
-        # plt.figure()
-        # plt.plot(x/1e9, np.abs(y), '.')
-        # plt.axvline(f_c/1e9, color='r')
-        # plt.xlabel("Frequency [GHz]")
-        # plt.ylabel("|S21|")
-        # plt.title("Data entering initial guess")
-        # plt.show()
+        print(f'Initial guess before curve fit shows that fc = {f_c/1e9:.6f} GHz')
+        print(f'Initial guess before curve fit shows that linewidth = {kappa/1e3:.3f} kHz.')
+        print(f'Initial guess before curve fit shows that Q = {Q:.0f}.')
+        print(f'Initial guess before curve fit shows that Qc = {Qc:.0f}.')   
 
         fit_mask = (x > f_c - 5 * kappa) & (x < f_c + 5 * kappa)
-
+        if np.sum(fit_mask) < 5:
+            raise RuntimeError("Not enough points for magnitude curve_fit refinement.")
+        
         popt, _ = spopt.curve_fit(
             ff.one_cavity_peak_abs,
             x[fit_mask],
             np.abs(y[fit_mask]),
             p0=[Q, Qc, f_c],
-            bounds=([0, 0, x[fit_mask].min()], [np.inf, np.inf, x[fit_mask].max()])
+            bounds=([Q*0.5, Q*0.5, x[fit_mask].min()], [Q*1.5, Qc*1.5, x[fit_mask].max()])
         )
-
+        Q, Qc, f_c = popt
+        kappa = f_c / Q
         init_guess = [Q, Qc, f_c, phi]
 
-        print(f'Initial guess shows that fc = {f_c/1e9:.6f} GHz')
-        print(f'Initial guess shows that linewidth = {kappa/1e3:.3f} kHz.')
-        print(f'Initial guess shows that Q = {Q:.0f}.')
-        print(f'Initial guess shows that Qc = {Qc:.0f}.')      
+        print(f'Initial guess after curve fit shows that fc = {f_c/1e9:.6f} GHz')
+        print(f'Initial guess after curve fit shows that linewidth = {kappa/1e3:.3f} kHz.')
+        print(f'Initial guess after curve fit shows that Q = {Q:.0f}.')
+        print(f'Initial guess after curve fit shows that Qc = {Qc:.0f}.')      
 
     except Exception as e:
         raise RuntimeError(f"Initial guess failed inside find_initial_guess(): {e}") from e
@@ -672,7 +680,7 @@ def fit(
             )
     else:
         init, x_c, y_c, r = find_initial_guess(
-            xdata, y1data, y2data, Method, output_path, plot_extra
+            xdata, y1data, y2data, Method,
         )
         freq  = init[2]
         kappa = init[2] / init[0]
