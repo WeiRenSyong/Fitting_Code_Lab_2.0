@@ -104,9 +104,9 @@ def find_initial_guess(
     try:
         y = y1 + 1j * y2
         # When the data is high SNR, smooth_sigma can set to 1
-        # When the data is moderate smoothing, smooth_sigma can set to 2
-        # When the data is low smoothing, smooth_sigma can set to 3
-        smooth_sigma = 2 
+        # When the data is moderate SNR, smooth_sigma can set to 2
+        # When the data is low SNR, smooth_sigma can set to 3
+        smooth_sigma = 3 
         y1_smooth = gaussian_filter1d(y1, smooth_sigma)
         y2_smooth = gaussian_filter1d(y2, smooth_sigma)
         y_smooth = y1_smooth + 1j * y2_smooth
@@ -178,9 +178,11 @@ def find_initial_guess(
         popt, _ = spopt.curve_fit(
             ff.one_cavity_peak_abs,
             x[fit_mask],
-            np.abs(y_smooth[fit_mask]),
+            np.abs(y_smooth[fit_mask])/off_mag,
             p0=[Q, Qc, f_c],
-            bounds=([Q*0.5, Q*0.5, x[fit_mask].min()], [Q*1.5, Qc*1.5, x[fit_mask].max()])
+            # Give a perturbation to refine initial guess
+            bounds=([Q*0.95, Qc*0.95, x[fit_mask].min()], [Q*1.05, Qc*1.05, x[fit_mask].max()])
+            # bounds=([1e-10, 1e-10, x[fit_mask].min()], [1e10, 1e10, x[fit_mask].max()])
         )
         Q, Qc, f_c = popt
         kappa = f_c / Q
@@ -195,8 +197,6 @@ def find_initial_guess(
         raise RuntimeError(f"Initial guess failed inside find_initial_guess(): {e}") from e
 
     return init_guess, x_c, y_c, r
-
-
 
 def monte_carlo_fit(
         xdata=None, 

@@ -60,8 +60,8 @@ def fit_single_res(
 
     # Fit settings
     fit_type = 'DCM'
-    MC_iteration = 1000
-    MC_rounds = 1000
+    MC_iteration = 10
+    MC_rounds = 10
     MC_fix = []
     normalize = 5
 
