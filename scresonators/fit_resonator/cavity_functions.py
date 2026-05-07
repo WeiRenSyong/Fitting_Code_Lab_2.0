@@ -13,7 +13,7 @@ def one_cavity_peak_abs(x, Q, Qc, w1):
 
 def one_cavity_peak(x, Q, Qc, w1):
     """Ideal resonator magnitude — used for initial guess fitting."""
-    return np.abs(Q / Qc / (1 + 1j * (x - w1) / w1 * 2 * Q))
+    return np.abs(Q / Qc / (1 + 2 * 1j * Q * (x - w1) / w1))
 
 def fit_raw_compare(x, y, params, method):
     """
