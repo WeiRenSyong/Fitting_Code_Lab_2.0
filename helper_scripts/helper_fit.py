@@ -35,7 +35,6 @@ print("fit_resonator.fit loaded from:", fsd.__file__)
 def fit_single_res(
         filename, 
         preprocess_method='circle',
-        data_dir=None, 
         save_dcm_plot=False,
         save_fit_dirs=r"fits/", 
         manual_init=None, 
@@ -44,17 +43,9 @@ def fit_single_res(
     Fit a single resonator from file.
     """
 
-    # Resolve input file path
     file_path = Path(filename)
-    if not file_path.is_absolute():
-        if data_dir is None:
-            file_path = Path.cwd() / file_path
-        else:
-            file_path = Path(data_dir) / file_path
-
     if not file_path.exists():
         raise FileNotFoundError(f"Resonator file not found: {file_path}")
-
     print("-------------")
     print(f"fit_single_res: {file_path}")
 
@@ -88,17 +79,12 @@ def fit_single_res(
     )
 
     fig = None
-    print("[DEBUG] helper_fit file:", __file__)
-    print("[DEBUG] fit.py file:", fsd.__file__)
-    print("[DEBUG] resonator.py file:", res.__file__)
 
-    # params, conf_intervals, err, init1, fig = fsd.fit(myres)
     fit_result = fsd.fit(myres)
     if fit_result is None:
         raise RuntimeError(
             f"fsd.fit returned None for file: {file_path}. "
-            "Fitting failed internally (likely bad initial guess or circle preprocessing failed)."
-        )
+            "Fitting failed internally (likely bad initial guess or circle preprocessing failed).")
     params, conf_intervals, err, init1, fig = fit_result
 
     return params, err, conf_intervals, fig
@@ -108,7 +94,6 @@ def fit_single_power_list(
         powers,
         preprocess_method='circle',
         phi0=0.,
-        data_dir='',
         show_plots=False,
         save_dcm_plot=True,
         save_fit_dirs=r"fits/",
@@ -117,9 +102,6 @@ def fit_single_power_list(
     """
     Fit each power independently and return fitted parameters.
     """
-
-    # if len(filenames) != len(powers):
-    #     raise ValueError(f"Length mismatch: {len(filenames)=}, {len(powers)=}")
 
     if manual_init_list is None:
         manual_init_list = [None] * len(filenames)
@@ -132,7 +114,6 @@ def fit_single_power_list(
         params, err, conf_int, fig = fit_single_res(
             filename,
             preprocess_method=preprocess_method,
-            data_dir=data_dir,
             save_dcm_plot=save_dcm_plot,
             save_fit_dirs=save_fit_dirs,
             manual_init=manual_init_list[idx],
@@ -212,7 +193,6 @@ def fit_qiqcfc_vs_power(
             params, err, conf_int, fig = fit_single_res(
                 filename,
                 preprocess_method=preprocess_method,
-                data_dir=data_dir,
                 save_dcm_plot=save_dcm_plot,
                 save_fit_dirs=save_fit_dirs,
                 manual_init=manual_init,
@@ -543,7 +523,6 @@ def power_sweep_fit_drv(
         powers,
         preprocess_method=preprocess_method,
         phi0=phi0,
-        data_dir=data_dir,
         show_plots=show_plots,
         save_dcm_plot=True,
         save_fit_dirs=save_fit_dirs,

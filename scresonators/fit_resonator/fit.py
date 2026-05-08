@@ -139,7 +139,6 @@ def find_initial_guess(
         #######################################################
         #### Estimate Q/Qc from the radius of the circle   ####
         #######################################################
-        
         mag_wing = np.r_[mag[:3], mag[-3:]]
         off_mag = np.mean(mag_wing)
         dip_mag = mag[freq_idx]
@@ -228,7 +227,7 @@ def monte_carlo_fit(
     try:
         counts = 0
         while counts < Method.MC_rounds:
-            counts += 1
+            counts = counts + 1
             random = Method.MC_step_const * (np.random.random_sample(len(parameter)) - 0.5)
 
             # Zero out steps for fixed parameters
@@ -271,9 +270,6 @@ def phase_centered(
         theta, 
         delay=0.):
     return theta - 2 * np.pi * delay * (f - fr) + 2. * np.arctan(2. * Ql * (1. - f / fr))
-
-
-
 
 def phase_dist(
         angle):
@@ -337,8 +333,6 @@ def fit_phase(
 
     return p_final[0]
 
-
-
 def periodic_boundary(
         angle):
     return (angle + np.pi) % (2 * np.pi) - np.pi
@@ -358,8 +352,6 @@ def calibrate(
 
     r /= a
     return delay_remaining, a, alpha, theta, phi, fr, Ql
-
-
 
 def normalize(
         f_data, z_data, delay, a, alpha):
@@ -445,8 +437,6 @@ def preprocess_circle(
     z_norm = normalize(xdata, z_data, delay_remaining, a, alpha)
 
     return z_norm
-
-
 
 def background_removal(
         databg, 
