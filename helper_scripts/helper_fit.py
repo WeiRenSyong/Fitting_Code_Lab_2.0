@@ -165,9 +165,6 @@ def fit_qiqcfc_vs_power(
         filenames = [r["filename"] for r in single_fit_results]
         powers = [r["power"] for r in single_fit_results]
 
-    if filenames is None or powers is None:
-        raise ValueError("filenames/powers are None and single_fit_results was not provided.")
-
     if len(filenames) != len(powers):
         raise ValueError(f"Length mismatch: {len(filenames)=}, {len(powers)=}")
 
@@ -186,18 +183,15 @@ def fit_qiqcfc_vs_power(
     Q_err =np.zeros(Npts)
 
     for idx, filename in enumerate(filenames):
-
         if single_fit_results is None:
             manual_init = manual_init_list[idx]
-
             params, err, conf_int, fig = fit_single_res(
                 filename,
                 preprocess_method=preprocess_method,
                 save_dcm_plot=save_dcm_plot,
                 save_fit_dirs=save_fit_dirs,
                 manual_init=manual_init,
-                plot_extra=plot_extra
-            )
+                plot_extra=plot_extra)
         else:
             r = single_fit_results[idx]
             params = r["params"]
@@ -205,11 +199,15 @@ def fit_qiqcfc_vs_power(
             conf_int = r["conf_int"]
             fig = r["fig"]
 
-        Qcj = params[1] * np.exp(1j * (params[3] + phi0))
-        Qij = 1.0 / (1.0 / params[0] - np.real(1.0 / Qcj))
 
         Q[idx] = params[0]
+
         fscale = 1e9 if params[2] > 1e9 else 1
+        fc[idx] = params[2] / fscale
+
+        Qcj = params[1] * np.exp(1j * (params[3] + phi0))
+        Qij = 1.0 / (1.0 / params[0] - np.real(1.0 / Qcj))
+        
         Qi_val = np.real(Qij)
         Qc_val = np.real(Qcj)
 
@@ -220,10 +218,7 @@ def fit_qiqcfc_vs_power(
         else:
             Qi[idx] = Qi_val
             Qc[idx] = Qc_val
-
         
-        
-        fc[idx] = params[2] / fscale
         # Intentionally use Qc[0] and fc[0] as reference values for photon-number conversion
         power_at_device = powers[idx] + np.sum(atten)
 
