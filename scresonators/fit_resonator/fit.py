@@ -423,8 +423,6 @@ def preprocess_circle(
 
     z_data = ydata * np.exp(2j * np.pi * delay * xdata)
 
-    print(f"[DEBUG] delay = {delay:.3e}")
-
     # TEMP: disable delay to test
     z_data = ydata  # <-- comment out delay application
 
