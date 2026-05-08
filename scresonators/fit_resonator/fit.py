@@ -49,9 +49,6 @@ def extract_near_res(
 
     return x_temp, y_temp
 
-
-
-
 def find_circle(
         x, y):
     """Least-squares circle fit (Kåsa method)."""
@@ -260,8 +257,6 @@ def monte_carlo_fit(
         stop_MC = True
 
     return parameter, stop_MC, error
-
-
 
 def phase_centered(
         f, 
