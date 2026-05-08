@@ -114,6 +114,11 @@ def find_initial_guess(
         y_smooth = y1_smooth + 1j * y2_smooth
         x_c, y_c, r = find_circle(y1_smooth, y2_smooth)
         z_c = x_c + 1j * y_c
+
+        ##############################################################################
+        #### Dtermine phi from the rotation of the center of circle around (1, 0) ####
+        ##############################################################################
+        phi = np.angle(-z_c)
         
         ###############################################################################
         #### Determine f_c from the opposite the off-resonance point on the circle ####
@@ -127,11 +132,6 @@ def find_initial_guess(
         # Pick measured point closest to that opposite-circle target
         freq_idx = np.argmin(np.abs(y_smooth - z_res_target))
         f_c = x[freq_idx]   
-
-        ##############################################################################
-        #### Dtermine phi from the rotation of the center of circle around (1, 0) ####
-        ##############################################################################
-        phi = np.angle(-z_c)
 
         #######################################################
         #### Estimate Q/Qc from the radius of the circle   ####
