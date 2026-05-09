@@ -112,84 +112,108 @@ def find_initial_guess(
         y1_smooth = gaussian_filter1d(y1, smooth_sigma)
         y2_smooth = gaussian_filter1d(y2, smooth_sigma)
         y_smooth = y1_smooth + 1j * y2_smooth
-        x_c, y_c, r = find_circle(y1_smooth, y2_smooth)
-        z_c = x_c + 1j * y_c
 
-        ##############################################################################
-        #### Dtermine phi from the rotation of the center of circle around (1, 0) ####
-        ##############################################################################
-        phi = np.angle(-z_c)
-        
-        ###############################################################################
-        #### Determine f_c from the opposite the off-resonance point on the circle ####
-        ###############################################################################
+        ################################################################################
+        #### Use off-resonance point to determine the scaling coefficient (off_mag) ####
+        #### Use off-resonance point to determine the background phase (off_phase) ####
+        ################################################################################
         mag = np.abs(y_smooth)
-        # Estimate off-resonance point from both frequency wings
         n_edge = 3
         z_off = np.mean(np.r_[y_smooth[:n_edge], y_smooth[-n_edge:]])
-        theta_off = np.angle(z_off - z_c)
-        z_res_target = z_c + r * np.exp(1j * (theta_off + np.pi))
-        # Pick measured point closest to that opposite-circle target
-        freq_idx = np.argmin(np.abs(y_smooth - z_res_target))
-        f_c = x[freq_idx]   
+        off_mag = np.abs(z_off)
+        off_phase = np.angle(z_off)
+
+        #################################################################################
+        #### Normalize the raw data first to extract the initial guess more accurate ####
+        #################################################################################
+        y_norm = y_smooth / off_mag * np.exp(-1j * off_phase)
+        # Fit circle to normalized complex data
+        x_c, y_c, r = find_circle(np.real(y_smooth), np.imag(y_smooth))
+        z_c = x_c + 1j * y_c
+        if r <= 0:
+            raise RuntimeError("Invalid fitted circle radius.")
 
         #######################################################
         #### Estimate Q/Qc from the radius of the circle   ####
         #######################################################
-        mag_wing = np.r_[mag[:3], mag[-3:]]
-        off_mag = np.mean(mag_wing)
-        dip_mag = mag[freq_idx]
-        depth = off_mag - dip_mag
-        if depth <= 0:
-            raise RuntimeError("No visible resonance dip in magnitude.")
-        Q_over_Qc = depth / off_mag   # Q_over_Qc indicates the how deep of the resonance dip
+        Q_over_Qc = 2 * r
 
+        ##############################################################################
+        #### Dtermine phi from the rotation of the center of circle around (1, 0) ####
+        ##############################################################################
+        phi = np.angle(1 - z_c)
+        
+        ###############################################################################
+        #### Determine f_c from the opposite the off-resonance point on the circle ####
+        ###############################################################################
+        z_off_norm = 1 + 0j
+        theta_off = np.angle(z_off_norm - z_c)
+        z_res_target = z_c + r * np.exp(1j * (theta_off + np.pi))
+        # Pick measured point closest to that opposite-circle target
+        freq_idx = np.argmin(np.abs(y_smooth - z_res_target))
+        f_c = x[freq_idx]   
+        
         #########################################
         #### Estimate Q from the fc and FWHM ####
+        #### Estimate Qc from Q_over_Qc      ####
+        #### Estimate the FWHM(kappa)        ####
         #########################################
+        mag = np.abs(y_norm)
+        dip_mag = mag[freq_idx]
+        off_mag_norm = 1.0
+
+        depth = off_mag_norm - dip_mag
+        if depth <= 0:
+            raise RuntimeError("No visible resonance dip found.")
+        
         half_level = dip_mag + depth / 2
-        left_idx = np.argmin(np.abs(mag[:freq_idx] - half_level))
-        right_idx = np.argmin(np.abs(mag[freq_idx:] - half_level))
-        idx1 = left_idx
-        idx2 = freq_idx + right_idx
-        if idx2 <= idx1:
-            raise RuntimeError("Invalid FWHM index ordering.")
-        kappa = abs(x[idx2] - x[idx1])   # linewidth of the resonance
+
+        left_indices = np.where(x < f_c)[0]
+        right_indices = np.where(x > f_c)[0]
+
+        if len(left_indices) == 0 or len(right_indices) == 0:
+            raise RuntimeError("Resonance is too close to edge of frequency span.")
+
+        idx1 = left_indices[np.argmin(np.abs(mag[left_indices] - half_level))]
+        idx2 = right_indices[np.argmin(np.abs(mag[right_indices] - half_level))]
+
+        kappa = abs(x[idx2] - x[idx1])
+
         if kappa <= 0:
-            raise RuntimeError("Invalid linewidth from FWHM.")     
+            raise RuntimeError("Invalid linewidth estimate.")
+        
         Q = f_c / kappa
+        Qc = Q / Q_over_Qc
 
-        ####################################################
-        #### Estimate Qc from extracted Q and Q_over_Qc ####
-        ####################################################
-        Qc = Q / Q_over_Qc  
-
-        print(f'Initial guess before curve fit shows that fc = {f_c/1e9:.6f} GHz')
+        print(f'Initial guess before curve fit shows that fc = {f_c/1e9:.4f} GHz')
         print(f'Initial guess before curve fit shows that linewidth = {kappa/1e3:.3f} kHz.')
         print(f'Initial guess before curve fit shows that Q = {Q:.0f}.')
-        print(f'Initial guess before curve fit shows that Qc = {Qc:.0f}.')   
+        print(f'Initial guess before curve fit shows that Qc = {Qc:.0f}.') 
+        print(f'Initial guess before curve fit shows that phi = {phi:.4f} rad.')  
 
+        #################################################################################
+        #### Pick up the potins within +/- 5 times of FWHM and refine all parameters ####
+        #################################################################################
         fit_mask = (x > f_c - 5 * kappa) & (x < f_c + 5 * kappa)
         if np.sum(fit_mask) < 5:
-            raise RuntimeError("Not enough points for magnitude curve_fit refinement.")
+            raise RuntimeError("Need to increase f_span for parameter refinement.")
         
         popt, _ = spopt.curve_fit(
             ff.cavity_DCM,
             x[fit_mask],
-            np.abs(y_smooth[fit_mask])/off_mag,
+            np.abs(y_norm[fit_mask]),
             p0=[Q, Qc, f_c, phi],
             # Give a perturbation to refine initial guess
-            bounds=([Q*0.95, Qc*0.95, x[fit_mask].min(), -np.pi], [Q*1.05, Qc*1.05, x[fit_mask].max(), +np.pi])
-            # bounds=([1e-10, 1e-10, x[fit_mask].min()], [1e10, 1e10, x[fit_mask].max()])
-        )
+            bounds=([Q*0.5, Qc*0.5, x[fit_mask].min(), -np.pi], [Q*1.5, Qc*1.5, x[fit_mask].max(), +np.pi]))
         Q, Qc, f_c, phi = popt
         kappa = f_c / Q
         init_guess = [Q, Qc, f_c, phi]
 
-        print(f'Initial guess after curve fit shows that fc = {f_c/1e9:.6f} GHz')
+        print(f'Initial guess after curve fit shows that fc = {f_c/1e9:.4f} GHz')
         print(f'Initial guess after curve fit shows that linewidth = {kappa/1e3:.3f} kHz.')
         print(f'Initial guess after curve fit shows that Q = {Q:.0f}.')
-        print(f'Initial guess after curve fit shows that Qc = {Qc:.0f}.')      
+        print(f'Initial guess after curve fit shows that Qc = {Qc:.0f}.')
+        print(f'Initial guess after curve fit shows that phi = {phi:.4f} rad.')      
 
     except Exception as e:
         raise RuntimeError(f"Initial guess failed inside find_initial_guess(): {e}") from e
