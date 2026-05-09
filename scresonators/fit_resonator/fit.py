@@ -88,8 +88,7 @@ def find_circle(
 
 def find_initial_guess(
         x, # frequency
-        y1, # real part
-        y2, # imaginary part
+        y1, y2, # real part, imaginary part
         Method, # DCM
         ):
     """
@@ -105,13 +104,12 @@ def find_initial_guess(
         #### Find the complex circle and determine the center and radius of it ####
         ###########################################################################
         y = y1 + 1j * y2
-        # When the data is high SNR, smooth_sigma can set to 1
-        # When the data is moderate SNR, smooth_sigma can set to 2
-        # When the data is low SNR, smooth_sigma can set to 3
+        # High SNR: 1; Moderate SNR: 2; Low SNR: 3
         smooth_sigma = 3 
         y1_smooth = gaussian_filter1d(y1, smooth_sigma)
         y2_smooth = gaussian_filter1d(y2, smooth_sigma)
         y_smooth = y1_smooth + 1j * y2_smooth
+        plot_diagnostic_s21(x, y_smooth, "y_smooth", fc=None)
 
         ################################################################################
         #### Use off-resonance point to determine the scaling coefficient (off_mag) ####
@@ -128,7 +126,7 @@ def find_initial_guess(
         #################################################################################
         y_norm = y_smooth / off_mag * np.exp(-1j * off_phase)
         # Fit circle to normalized complex data
-        x_c, y_c, r = find_circle(np.real(y_smooth), np.imag(y_smooth))
+        x_c, y_c, r = find_circle(np.real(y_norm), np.imag(y_norm))
         z_c = x_c + 1j * y_c
         if r <= 0:
             raise RuntimeError("Invalid fitted circle radius.")
@@ -150,8 +148,9 @@ def find_initial_guess(
         theta_off = np.angle(z_off_norm - z_c)
         z_res_target = z_c + r * np.exp(1j * (theta_off + np.pi))
         # Pick measured point closest to that opposite-circle target
-        freq_idx = np.argmin(np.abs(y_smooth - z_res_target))
-        f_c = x[freq_idx]   
+        freq_idx = np.argmin(np.abs(y_norm - z_res_target))
+        f_c = x[freq_idx] 
+        plot_diagnostic_s21(x, y_norm, "y_norm", fc=f_c)
         
         #########################################
         #### Estimate Q from the fc and FWHM ####
@@ -163,8 +162,12 @@ def find_initial_guess(
         off_mag_norm = 1.0
 
         depth = off_mag_norm - dip_mag
+        print(f'depth={depth:.4f}, dip_mag={dip_mag:.4f}, f_c={f_c/1e9:.6f} GHz.')
+
         if depth <= 0:
-            raise RuntimeError("No visible resonance dip found.")
+            raise RuntimeError(
+                "No visible resonance dip found. freq_idx is likely selecting the wrong side of the circle."
+            )
         
         half_level = dip_mag + depth / 2
 
@@ -201,7 +204,7 @@ def find_initial_guess(
         popt, _ = spopt.curve_fit(
             ff.cavity_DCM,
             x[fit_mask],
-            np.abs(y_norm[fit_mask]),
+            y_norm[fit_mask],
             p0=[Q, Qc, f_c, phi],
             # Give a perturbation to refine initial guess
             bounds=([Q*0.5, Qc*0.5, x[fit_mask].min(), -np.pi], [Q*1.5, Qc*1.5, x[fit_mask].max(), +np.pi]))
@@ -219,6 +222,45 @@ def find_initial_guess(
         raise RuntimeError(f"Initial guess failed inside find_initial_guess(): {e}") from e
 
     return init_guess, x_c, y_c, r
+
+def plot_diagnostic_s21(
+        x, y, 
+        title, 
+        fc=None):
+    
+    fig, axs = plt.subplots(1, 3, figsize=(15, 5))
+
+    x_GHz = x / 1e9 if np.nanmax(x) > 1e9 else x
+    fc_plot = fc / 1e9 if fc is not None and np.nanmax(x) > 1e9 else fc
+
+    axs[0].plot(x_GHz, np.abs(y), 'o')
+    if fc is not None:
+        axs[0].axvline(fc_plot, color='k', linestyle='--')
+    axs[0].set_xlabel("Frequency [GHz]")
+    axs[0].set_ylabel("|S21|")
+    axs[0].set_title("Magnitude")
+
+    axs[1].plot(x_GHz, np.unwrap(np.angle(y)), 'o')
+    if fc is not None:
+        axs[1].axvline(fc_plot, color='k', linestyle='--')
+    axs[1].set_xlabel("Frequency [GHz]")
+    axs[1].set_ylabel("Phase [rad]")
+    axs[1].set_title("Phase")
+
+    axs[2].plot(np.real(y), np.imag(y), 'o')
+    if fc is not None:
+        idx = np.argmin(np.abs(x - fc))
+        axs[2].plot(np.real(y[idx]), np.imag(y[idx]), 'rx', markersize=12)
+    axs[2].set_xlabel("Re(S21)")
+    axs[2].set_ylabel("Im(S21)")
+    axs[2].set_aspect("equal", adjustable="box")
+    axs[2].set_title("Complex plane")
+
+    fig.suptitle(title)
+    fig.tight_layout()
+    plt.show()
+
+    return fig
 
 def monte_carlo_fit(
         xdata=None, 
@@ -431,9 +473,7 @@ def fit_delay(
 
 def preprocess_circle(
         xdata: np.ndarray, 
-        ydata: np.ndarray, 
-        output_path: str, 
-        plot_extra):
+        ydata: np.ndarray):
     """Circle-based preprocessing with frequency-dependent background removal."""
     xdata, ydata = remove_f_dep_background(xdata, ydata)
 
@@ -588,15 +628,10 @@ def min_fit(
 def fit(
         resonator):
     """
-    Fit a DCM resonator.
-
-    Parameters
-    ----------
     resonator : Resonator
         Populated Resonator object with data, method_class, etc.
-
-    Returns
     -------
+    Returns :
     output_params : list   [Q, Qc, w1, phi]
     conf_array    : list   [Q, Qi, Qc, Qc_Re, phi, w1] confidence intervals
     error         : float  Monte Carlo fit error
@@ -630,15 +665,12 @@ def fit(
         linear_amps = linear_amps[sort_idx]
         phases = phases[sort_idx]
 
-        ydata = np.multiply(linear_amps, np.exp(1j * phases))
+        ydata = np.multiply(linear_amps, np.exp(1j * phases)) # complex S21
     except Exception as e:
         raise ValueError(f"Failed to read resonator data: {e}")
 
     output_path = fp.name_folder(dir, str(Method.method))
-    if plot_extra:
-        # BUG FIX: exist_ok=True prevents crash if folder already exists
-        os.makedirs(output_path, exist_ok=True)
-
+    
     x_initial = xdata
     y_initial = ydata
 
@@ -647,7 +679,7 @@ def fit(
     if resonator.databg is not None:
         ydata = background_removal(resonator.databg, linear_amps, phases, output_path)
     elif preprocess_method == "circle":
-        ydata = preprocess_circle(xdata, ydata, output_path, plot_extra)
+        ydata = preprocess_circle(xdata, ydata)
 
     y_raw = ydata
     x_raw = xdata
@@ -671,14 +703,11 @@ def fit(
                 raise ValueError(
                     "manual_init must have exactly 4 elements: [Q, Qc, f_c, phi]"
                 )
-            # BUG FIX: kappa moved inside the if block so it is set after
-            # manual_init[0] is updated, avoiding the previous divide-by-zero.
             Qc_complex      = manual_init[1] / np.exp(1j * manual_init[3])
             manual_init[0]  = 1 / (1 / manual_init[0] + np.real(1 / Qc_complex))
             kappa           = manual_init[2] / manual_init[0]
 
             init   = manual_init
-            freq   = init[2]
             x_c = y_c = r = 0
             print(f"Manual initial guess: {manual_init}")
         except Exception as e:
@@ -689,28 +718,26 @@ def fit(
             )
     else:
         init, x_c, y_c, r = find_initial_guess(
-            xdata, y1data, y2data, Method,
-        )
-        freq  = init[2]
+            xdata, 
+            y1data, y2data, 
+            Method)
         kappa = init[2] / init[0]
 
     # ── Step 2: Least-squares minimisation ────────────────────────────────
     xdata, ydata = x_raw, y_raw
-    
-    w1_window = 5 * kappa
+
     try:
         params = lmfit.Parameters()
-        params.add('Q',  value=init[0], vary=change_Q,   min=init[0] * 0.1, max=init[0] * 10.0)
-
-        params.add('Qc', value=init[1], vary=change_Qc, min=init[1] * 0.1, max=init[1] * 10.0)
+        params.add('Q',  value=init[0], vary=change_Q,   min=init[0] * 0.5, max=init[0] * 1.5)
+        params.add('Qc', value=init[1], vary=change_Qc, min=init[1] * 0.5, max=init[1] * 1.5)
         params.add(
             'w1',
             value=init[2],
             vary=change_w1,
-            min=max(np.min(xdata), init[2] - w1_window),
-            max=min(np.max(xdata), init[2] + w1_window)
+            min=max(np.min(xdata), init[2] - 5 * kappa),
+            max=min(np.max(xdata), init[2] + 5 * kappa)
         )
-        params.add('phi', value=init[3], vary=change_phi, min=-np.pi,          max=np.pi)
+        params.add('phi', value=init[3], vary=change_phi, min=-np.pi, max=np.pi)
     except Exception as e:
         raise ValueError(f"Failed to define lmfit parameters: {e}")
 
@@ -718,7 +745,7 @@ def fit(
 
     if fit_params is None:
         if manual_init is None:
-            raise RuntimeError("Failed to minimise function for least-squares fit.")
+            raise RuntimeError("Failed to minimize function for least-squares fit.")
         fit_params = manual_init
 
     # ── Step 3: Monte Carlo refinement ────────────────────────────────────
@@ -735,7 +762,7 @@ def fit(
             stop_MC = True
 
         output_params.append(MC_param)
-        MC_counts += 1
+        MC_counts = MC_counts + 1
         continue_condition = (MC_counts < Method.MC_iteration) and not stop_MC
 
         if not continue_condition:
@@ -749,19 +776,17 @@ def fit(
     if output_params[0] != fit_params[0]:
         try:
             params2 = lmfit.Parameters()
-            params2.add('Q',  value=output_params[0], vary=change_Q, min=output_params[0] * 0.1, max=output_params[0] * 10.0)
-            params2.add('Qc', value=output_params[1], vary=change_Qc, min=output_params[1] * 0.1, max=output_params[1] * 10.0)
-            w1_window = 5 * kappa
-
+            params2.add('Q',  value=output_params[0], vary=change_Q, min=output_params[0] * 0.5, max=output_params[0] * 1.5)
+            params2.add('Qc', value=output_params[1], vary=change_Qc, min=output_params[1] * 0.5, max=output_params[1] * 1.5)
             params2.add(
                 'w1',
                 value=output_params[2],
                 vary=change_w1,
-                min=max(np.min(xdata), init[2] - w1_window),
-                max=min(np.max(xdata), init[2] + w1_window)
+                min=max(np.min(xdata), init[2] - 5 * kappa),
+                max=min(np.max(xdata), init[2] + 5 * kappa)
             )
             params2.add('phi', value=output_params[3], vary=change_phi,
-                        min=output_params[3] * 0.9, max=output_params[3] * 1.1)
+                        min=output_params[3] * 0.5, max=output_params[3] * 1.5)
             output_params, conf_array = min_fit(params2, xdata, ydata, Method)
         except Exception as e:
             print(f"Warning: post-MC re-minimisation failed: {e}")
