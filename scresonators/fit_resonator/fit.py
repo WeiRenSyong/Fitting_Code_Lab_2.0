@@ -87,14 +87,13 @@ def find_circle(
     return matrix1 + xavg, matrix2 + yavg, R
 
 def find_initial_guess(
-        x, # frequency
-        y1, y2, # real part, imaginary part
+        x, y1, y2, # frequency; real part; imaginary part
         Method, # DCM
         ):
     """
     Determine initial guess for DCM parameters
     INPUT:  [frequency, real part, imag part, DCM]
-    OUTPUT: [Q, Qc, f_c, phi], [x_c, y_c, r]
+    OUTPUT: [Q, Qc, f_c, phi]; [x_c, y_c, r]
     """
     if Method.method != "DCM":
         raise ValueError("It currently supports DCM only.")
@@ -109,11 +108,10 @@ def find_initial_guess(
         y1_smooth = gaussian_filter1d(y1, smooth_sigma)
         y2_smooth = gaussian_filter1d(y2, smooth_sigma)
         y_smooth = y1_smooth + 1j * y2_smooth
-        plot_diagnostic_s21(x, y_smooth, "y_smooth", fc=None)
 
         ################################################################################
         #### Use off-resonance point to determine the scaling coefficient (off_mag) ####
-        #### Use off-resonance point to determine the background phase (off_phase) ####
+        #### Use off-resonance point to determine the background phase (off_phase)  ####
         ################################################################################
         mag = np.abs(y_smooth)
         n_edge = 3
@@ -126,7 +124,7 @@ def find_initial_guess(
         #################################################################################
         y_norm = y_smooth / off_mag * np.exp(-1j * off_phase)
         # Fit circle to normalized complex data
-        x_c, y_c, r = find_circle(np.real(y_norm), np.imag(y_norm))
+        x_c, y_c, r = find_circle(np.real(y_smooth), np.imag(y_smooth))
         z_c = x_c + 1j * y_c
         if r <= 0:
             raise RuntimeError("Invalid fitted circle radius.")
@@ -139,7 +137,7 @@ def find_initial_guess(
         ##############################################################################
         #### Dtermine phi from the rotation of the center of circle around (1, 0) ####
         ##############################################################################
-        phi = np.angle(1 - z_c)
+        phi = np.angle(z_off - z_c)
         
         ###############################################################################
         #### Determine f_c from the opposite the off-resonance point on the circle ####
@@ -148,9 +146,8 @@ def find_initial_guess(
         theta_off = np.angle(z_off_norm - z_c)
         z_res_target = z_c + r * np.exp(1j * (theta_off + np.pi))
         # Pick measured point closest to that opposite-circle target
-        freq_idx = np.argmin(np.abs(y_norm - z_res_target))
-        f_c = x[freq_idx] 
-        plot_diagnostic_s21(x, y_norm, "y_norm", fc=f_c)
+        freq_idx = np.argmin(np.abs(y_smooth - z_res_target))
+        f_c = x[freq_idx]   
         
         #########################################
         #### Estimate Q from the fc and FWHM ####
@@ -162,12 +159,8 @@ def find_initial_guess(
         off_mag_norm = 1.0
 
         depth = off_mag_norm - dip_mag
-        print(f'depth={depth:.4f}, dip_mag={dip_mag:.4f}, f_c={f_c/1e9:.6f} GHz.')
-
         if depth <= 0:
-            raise RuntimeError(
-                "No visible resonance dip found. freq_idx is likely selecting the wrong side of the circle."
-            )
+            raise RuntimeError("No visible resonance dip found.")
         
         half_level = dip_mag + depth / 2
 
@@ -202,9 +195,9 @@ def find_initial_guess(
             raise RuntimeError("Need to increase f_span for parameter refinement.")
         
         popt, _ = spopt.curve_fit(
-            ff.cavity_DCM,
+            ff.cavity_DCM_abs,
             x[fit_mask],
-            y_norm[fit_mask],
+            np.abs(y_norm[fit_mask]),
             p0=[Q, Qc, f_c, phi],
             # Give a perturbation to refine initial guess
             bounds=([Q*0.5, Qc*0.5, x[fit_mask].min(), -np.pi], [Q*1.5, Qc*1.5, x[fit_mask].max(), +np.pi]))
@@ -419,9 +412,8 @@ def normalize(
     return (z_data / a) * np.exp(1j * (-alpha))
 
 def remove_f_dep_background(
-        xdata, 
-        ydata):
-    n_edge = max(5, len(xdata)//20)
+        xdata, ydata):
+    n_edge = min(2, len(xdata)//20)
     off_mag = np.mean(np.r_[np.abs(ydata[:n_edge]), np.abs(ydata[-n_edge:])])
     ydata_norm = ydata / off_mag
 
@@ -472,9 +464,9 @@ def fit_delay(
     return delay
 
 def preprocess_circle(
-        xdata: np.ndarray, 
-        ydata: np.ndarray):
+        xdata: np.ndarray, ydata: np.ndarray):
     """Circle-based preprocessing with frequency-dependent background removal."""
+    
     xdata, ydata = remove_f_dep_background(xdata, ydata)
 
     # delay  = fit_delay(xdata, ydata)
@@ -845,10 +837,10 @@ def fit(
                 f"Please use png, pdf, ps, eps or svg. ({e})"
             )
         
-    print("=== Raw data diagnostic ===")
-    print(f"x range: {xdata.min()/1e9:.6f} to {xdata.max()/1e9:.6f} GHz")
-    print(f"phase min/max before unwrap: {data.phases.min():.3f}, {data.phases.max():.3f}")
-    print(f"phase min/max after unwrap: {phases.min():.3f}, {phases.max():.3f}")
-    print(f"linear amp min/max: {linear_amps.min():.3e}, {linear_amps.max():.3e}")
+    # print("=== Raw data diagnostic ===")
+    # print(f"x range: {xdata.min()/1e9:.6f} to {xdata.max()/1e9:.6f} GHz")
+    # print(f"phase min/max before unwrap: {data.phases.min():.3f}, {data.phases.max():.3f}")
+    # print(f"phase min/max after unwrap: {phases.min():.3f}, {phases.max():.3f}")
+    # print(f"linear amp min/max: {linear_amps.min():.3e}, {linear_amps.max():.3e}")
 
     return output_params, conf_array, error, init, output_path
