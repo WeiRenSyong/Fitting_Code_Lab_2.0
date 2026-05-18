@@ -10,7 +10,8 @@ sys.path.insert(0, str(BASE_DIR / "scresonators")) # custom module folder 2
 
 import helper_fit as hf
 import helper_misc as hm
-import regex as re
+# import regex as re
+import re
 import matplotlib.pyplot as plt
 
 print("helper_fit   ->", hf.__file__)
