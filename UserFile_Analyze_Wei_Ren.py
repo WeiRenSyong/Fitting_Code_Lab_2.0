@@ -154,3 +154,5 @@ for resonator_path in chosen_resonators:
         print(f"[ERROR] Failed on {resonator_path.name}: {e}")
     finally:
         plt.close('all')
+
+print(f'Analyzing is done.')
