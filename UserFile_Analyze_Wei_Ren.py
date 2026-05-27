@@ -72,7 +72,7 @@ for r in chosen_resonators:
 # %% perform power sweep
 
 TLS_FIT_CONFIGS = {
-    "Tony_Ta_r_plane_02": {
+    "MQC_Ta_": {
         "tls_fit_init": [2.2e5, 1.0, 0.25],   # QHP_fix=True case
         "tls_fit_bounds": None,
     },
