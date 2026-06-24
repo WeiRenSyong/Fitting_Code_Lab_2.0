@@ -86,7 +86,7 @@ tls_cfg = TLS_FIT_CONFIGS.get(sample_name, TLS_FIT_CONFIGS["default"])
 
 external_attenuation = 0
 internal_attenuation = -70
-temperature_mK = 375
+temperature_mK = 205
 
 # manual_guess_res = [1640, 5830, 7.211780e9, -0.02] # [Q, Qc, f_c, phi]
 
