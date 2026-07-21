@@ -19,7 +19,7 @@ print("helper_misc  ->", hm.__file__)
 
 # %%  Get sample name and device information
 # Define data directory
-data_dir = Path(r"C:\Users\user\Downloads\Cooldown_49_Line_4-Nb_on_Sapphire_CTRL")
+data_dir = Path(r"C:\Users\user\OneDrive\文件\GitHub\Measurements\Cooldown_79_LineX-RoundRobin_01")
 
 # Safety check
 if not data_dir.exists():
@@ -156,3 +156,4 @@ for resonator_path in chosen_resonators:
         plt.close('all')
 
 print(f'Analyzing is done.')
+# %%
