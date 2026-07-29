@@ -19,7 +19,7 @@ print("helper_misc  ->", hm.__file__)
 
 # %%  Get sample name and device information
 # Define data directory
-data_dir = Path(r"C:\Users\user\OneDrive\文件\GitHub\Measurements\Cooldown_79_LineX-RoundRobin_01")
+data_dir = Path(r"C:\Users\user\OneDrive\文件\GitHub\Measurements\Cooldown_79_LineX-RoundRobin_Qb_01")
 
 # Safety check
 if not data_dir.exists():
